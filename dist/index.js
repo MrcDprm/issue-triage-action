@@ -20360,6 +20360,9 @@ var ExitCode;
   ExitCode2[ExitCode2["Success"] = 0] = "Success";
   ExitCode2[ExitCode2["Failure"] = 1] = "Failure";
 })(ExitCode || (ExitCode = {}));
+function setSecret(secret) {
+  issueCommand("add-mask", {}, secret);
+}
 function getInput(name, options) {
   const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
   if (options && options.required && !val) {
@@ -44319,6 +44322,8 @@ async function findTriageComment(octokit, repo, issueNumber) {
 // src/main.ts
 async function run() {
   try {
+    const apiKey = getInput("api-key");
+    if (apiKey) setSecret(apiKey);
     const event = checkEvent(context2.eventName, context2.payload);
     if (!event.ok) return skip(event.reason);
     const { issue: issue3 } = event;
