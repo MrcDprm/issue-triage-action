@@ -1,0 +1,54 @@
+name: Issue Triage Action
+description: Triages new issues with an LLM (type, labels, priority, duplicates, missing details); works with a free Gemini key.
+author: Miraç Deprem
+
+branding:
+  icon: tag
+  color: gray-dark
+
+inputs:
+  api-key:
+    description: API key of the LLM provider (for Gemini, a free key from Google AI Studio). Store it as a repository secret.
+    required: true
+  base-url:
+    description: OpenAI-compatible API address of the provider.
+    required: false
+    default: https://generativelanguage.googleapis.com/v1beta/openai/
+  model:
+    description: Chat model that classifies the issue.
+    required: false
+    default: gemini-3.1-flash-lite
+  embedding-model:
+    description: Embedding model for finding duplicates. Leave empty if the provider has none; duplicates are then found from issue titles.
+    required: false
+    default: gemini-embedding-001
+  github-token:
+    description: Token used to read issues and write labels and the comment.
+    required: false
+    default: ${{ github.token }}
+  max-candidates:
+    description: How many similar issues are shown to the model as possible duplicates.
+    required: false
+    default: '5'
+  similarity-threshold:
+    description: Minimum cosine similarity (0-1) for an issue to count as a duplicate candidate.
+    required: false
+    default: '0.8'
+  dry-run:
+    description: When true, the result is only written to the log; no labels or comment are added.
+    required: false
+    default: 'false'
+
+outputs:
+  type:
+    description: bug, feature, question or docs.
+  priority:
+    description: P0, P1, P2 or P3.
+  labels:
+    description: Labels added, comma-separated.
+  duplicates:
+    description: Possible duplicate issue numbers, comma-separated.
+
+runs:
+  using: node24
+  main: dist/index.js

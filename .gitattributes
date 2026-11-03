@@ -1,0 +1,4 @@
+# Satır sonları her yerde LF: Windows'ta paketlenen dist/ CI'daki Linux paketiyle birebir aynı olmalı.
+* text=auto eol=lf
+# Paket üretilmiş dosyadır; diff'lerde ve dil istatistiğinde gösterilmez.
+dist/** -diff linguist-generated=true
