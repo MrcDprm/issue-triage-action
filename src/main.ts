@@ -1,10 +1,11 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { findTriageComment } from './github.js'
+import { findDuplicateCandidates } from './duplicates.js'
+import { fetchRecentIssues, findTriageComment } from './github.js'
 import { checkEvent, checkLabels } from './issue.js'
+import { createLlmClient } from './llm.js'
 
-// İş akışını yöneten fonksiyon. Sonraki adımlar: tekrar adayları (#4), sınıflandırma (#5), etiket ve yorum (#6);
-// LLM istemcisi (src/llm.ts) onlarla birlikte bağlanır.
+// İş akışını yöneten fonksiyon. Sonraki adımlar: sınıflandırma (#5), etiket ve yorum (#6), girdi doğrulaması (#7).
 export async function run(): Promise<void> {
   try {
     // Anahtar günlükte geçerse GitHub onu *** olarak gösterir.
@@ -24,6 +25,26 @@ export async function run(): Promise<void> {
     if (labelReason) return skip(labelReason)
 
     core.info(`Triaging #${issue.number} (${event.action})`)
+
+    const embeddingModel = core.getInput('embedding-model')
+    const llm = createLlmClient({
+      baseUrl: core.getInput('base-url'),
+      apiKey: core.getInput('api-key', { required: true }),
+      model: core.getInput('model'),
+      embeddingModel,
+    })
+
+    const recent = await fetchRecentIssues(octokit, repo, issue.number)
+    const { method, candidates } = await findDuplicateCandidates({
+      llm,
+      issue,
+      recent,
+      maxCandidates: Number(core.getInput('max-candidates') || 5),
+      threshold: Number(core.getInput('similarity-threshold') || 0.75),
+      useEmbeddings: embeddingModel !== '',
+      warn: core.warning,
+    })
+    core.info(`Duplicate candidates (${method}): ${candidates.map((c) => `#${c.number}${c.similarity === null ? '' : ` ${c.similarity.toFixed(2)}`}`).join(', ') || 'none'}`)
   } catch (error) {
     // Beklenmeyen hata: iş akışı kırmızıya döner, mesaj günlükte görünür.
     core.setFailed(error instanceof Error ? error.message : String(error))

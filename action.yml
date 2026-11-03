@@ -33,7 +33,7 @@ inputs:
   similarity-threshold:
     description: Minimum cosine similarity (0-1) for an issue to count as a duplicate candidate.
     required: false
-    default: '0.8'
+    default: '0.75'
   dry-run:
     description: When true, the result is only written to the log; no labels or comment are added.
     required: false
