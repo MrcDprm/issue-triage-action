@@ -1,6 +1,6 @@
 # Issue Triage Action: plan
 
-Kararlar 2026-11-04. Kapsam tam (sadeleştirme yok), ayrı public repo, GitHub Marketplace'e çıkar. Mevcut repolara eklenmez.
+Kararlar 2026-11-04. **Güncelleme (aynı gün):** GitHub Models 30 Temmuz 2026'da kapatılmış; kullanıcı A seçeneğini seçti: OpenAI uyumlu sağlayıcı, varsayılan Gemini (anahtar repo secret'ı). Kapsam tam (sadeleştirme yok), ayrı public repo, GitHub Marketplace'e çıkar. Mevcut repolara eklenmez.
 
 ## Problem
 
@@ -12,7 +12,7 @@ Açık kaynak bir repoda issue'lar düzensiz gelir: etiketsiz, öncelik belirsiz
 - **GitHub'ın kendi AI örnekleri (actions/ai-inference ile yazılan iş akışları):** tek bir prompt, çıktı doğrulaması ve tekrar tespiti yok.
 - **Dosu, ücretli triage botları:** kurulum, hesap ve ücret gerektirir.
 
-Bizim farkımız: anahtarsız (GitHub Models + `GITHUB_TOKEN`), çıktısı şemaya ve reponun etiketlerine göre doğrulanan, tekrarı embedding ile bulan, issue'yu kapatmayan ve sadece bir yorum yazan bir Action.
+Bizim farkımız: ücretsiz bir Gemini anahtarıyla çalışan (OpenAI uyumlu her sağlayıcıyla da: Groq, OpenAI, Ollama), çıktısı şemaya ve reponun etiketlerine göre doğrulanan, tekrarı embedding ile bulan, issue'yu kapatmayan ve sadece bir yorum yazan bir Action.
 
 ## Özellikler
 
@@ -23,7 +23,7 @@ Bizim farkımız: anahtarsız (GitHub Models + `GITHUB_TOKEN`), çıktısı şem
 5. **Eksik bilgi:** hata kaydında sürüm, adımlar, beklenen/gerçek sonuç yoksa issue sahibinden istenir.
 6. **Tek yorum:** gizli bir işaretle (`<!-- issue-triage -->`) bulunur; issue düzenlenince aynı yorum güncellenir. Yorum issue'nun dilinde (Türkçe ya da İngilizce, diğer diller İngilizce).
 7. **Atlama:** etiketi olan issue (bakımcı etiketlemiş), bot açtığı issue ve pull request atlanır. Bot daha önce yorum yazdıysa düzenlemede yorum güncellenir, insanın eklediği etiketlere dokunulmaz.
-8. **Ayarlar (inputs):** model, aday sayısı, benzerlik eşiği, `dry-run` (etiket/yorum yazmadan sadece günlüğe yazar). **Çıktılar (outputs):** tür, öncelik, etiketler, tekrar adayları; sonraki adımlar kullanabilir.
+8. **Ayarlar (inputs):** `api-key` (secret), `base-url` (varsayılan Gemini'nin OpenAI uyumlu adresi), `model`, `embedding-model` (boşsa ya da sağlayıcı desteklemiyorsa tekrar bulma son issue başlıklarını modele vermeye düşer), aday sayısı, benzerlik eşiği, `dry-run` (etiket/yorum yazmadan sadece günlüğe yazar). **Çıktılar (outputs):** tür, öncelik, etiketler, tekrar adayları; sonraki adımlar kullanabilir.
 
 ## Akış
 
@@ -42,21 +42,22 @@ Model ya da ağ hatasında Action uyarı yazar ve başarılı biter (issue akı�
 
 | Seçim | Neden | Alternatif |
 |---|---|---|
-| **TypeScript, JavaScript Action (`node24`)** | Action'ların yerel türü; Docker Action'a göre saniyeler içinde başlar, her işletim sisteminde çalışır | Docker Action (yavaş açılış, sadece Linux), composite + Python |
+| **TypeScript 6.0, JavaScript Action (`node24`)** | Action'ların yerel türü; Docker Action'a göre saniyeler içinde başlar, her işletim sisteminde çalışır | Docker Action (yavaş açılış, sadece Linux), composite + Python. TypeScript 7.0 (Go derleyicisi) henüz typescript-eslint'te desteklenmiyor |
 | **@actions/core, @actions/github (Octokit)** | Resmî araç takımı: input/output, günlük, kimlikli REST istemcisi | Elle fetch |
-| **GitHub Models (sohbet + embedding)** | `GITHUB_TOKEN` ve `models: read` izniyle çalışır; anahtar, hesap, ücret yok | OpenAI/Gemini anahtarı (her kullanıcı secret eklemek zorunda) |
+| **OpenAI uyumlu API, varsayılan Gemini** (`gemini-3.1-flash-lite` + Gemini embedding) | Gemini'nin ücretsiz katmanında sohbet ve embedding var; aynı istek biçimi Groq, OpenAI ve Ollama'da da çalışır, kullanıcı sağlayıcı seçer | GitHub Models (2026-07-30'da kapandı), sadece Gemini SDK'sı (tek sağlayıcıya bağlar) |
 | **zod** | Modelin JSON cevabını çalışma anında doğrular, TypeScript türünü aynı şemadan üretir | Elle kontrol, ajv |
-| **@vercel/ncc** | Action'ı bağımlılıklarıyla tek `dist/index.js` dosyasına paketler; `node_modules` repoya girmez | rollup, esbuild |
+| **esbuild** | Action'ı bağımlılıklarıyla tek `dist/index.js` dosyasına paketler; `node_modules` repoya girmez. @actions paketleri artık yalnızca ESM, esbuild bunu ayarsız paketler | ncc (ESM desteği zayıf), rollup (GitHub şablonu, daha çok ayar) |
 | **Vitest** | Hızlı, TypeScript'i ayarsız çalıştırır; ağ istekleri sahte istemciyle | Jest |
 
-GitHub Models ücretsiz katmanının kotası modele göre değişir; varsayılan model küçük ve kotası geniş olandan seçilir (ilk parçada güncel kotaya bakılır). Embedding uç noktasının güncel adresi de ilk parçada doğrulanır.
+Gemini ücretsiz katmanında Google verileri ürün geliştirmede kullanabilir; README'de açıkça yazılır, gizli repolar için ücretli anahtar ya da başka sağlayıcı önerilir. Embedding modelinin güncel adı #3'te gerçek istekle doğrulanır.
 
 ## Güvenlik
 
 - **Prompt injection:** public repoda issue'yu herkes yazar. Issue metni sistem talimatından ayrı, sınırlandırılmış veri olarak verilir; modelin cevabı ne derse desin yalnızca şemadaki alanlar kullanılır.
 - **Çıktıya güvenilmez:** etiketler reponun etiket listesiyle kesiştirilir, tekrar adayları yalnızca bizim gönderdiğimiz aday numaralarından olabilir, öncelik enum.
 - **Yorum metni şablondan üretilir:** model serbest metin yazmaz; gerekçe ve eksik bilgi alanları kısaltılır, `@` anmaları ve bağlantılar etkisizleştirilir (kimse etiketlenmez, oltalama linki çıkmaz), Markdown kaçışlanır.
-- **En az yetki:** örnek iş akışında `issues: write`, `contents: read`, `models: read`; `pull_request_target` kullanılmaz.
+- **En az yetki:** örnek iş akışında `issues: write`, `contents: read`; `pull_request_target` kullanılmaz.
+- **API anahtarı:** sadece repo secret'ında; `core.setSecret` ile günlüklerde maskelenir, hata mesajlarına girmez.
 - **Kota kötüye kullanımı:** metin kırpılır (üst sınır), aday sayısı sınırlı; issue başına en fazla 2 model isteği.
 - Bağımlılıklar yayından önce `npm audit` ile kontrol edilir.
 
@@ -73,15 +74,13 @@ Birim: atlama kuralları, kosinüs ve aday seçimi, şema doğrulaması (bozuk J
 
 ## Issue'lar ve sprintler
 
-Sprint 1 (4-10 Kas):
+Tek sprint (4-10 Kas, kullanıcı kararı: uzatmadan şimdi bitirilir):
 1. chore: TypeScript iskeleti, action.yml, ncc, Vitest, CI (test + dist güncel mi)
 2. feat: issue okuma ve atlama kuralları
-3. feat: GitHub Models istemcisi (sohbet + embedding, hata ve 429 yönetimi)
+3. feat: OpenAI uyumlu LLM istemcisi (sohbet + embedding, hata ve 429 yönetimi)
 4. feat: embedding ile tekrar adayları
 5. feat: sınıflandırma prompt'u, JSON şeması, zod doğrulaması
 6. feat: etiket ekleme ve tek yorum (yaz/güncelle, TR/EN şablon, temizleme)
-
-Sprint 2 (11-17 Kas):
 7. feat: inputs/outputs ve dry-run
 8. test: prompt injection ve kenar durumları
 9. chore: repoda kendi kendini çalıştıran iş akışı, canlı deneme
