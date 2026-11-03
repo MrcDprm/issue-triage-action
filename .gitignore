@@ -1,0 +1,19 @@
+# Bağımlılıklar
+node_modules/
+
+# Derleme ara çıktıları (dist/ Action için repoda tutulur, lib/ tutulmaz)
+lib/
+coverage/
+*.tsbuildinfo
+
+# Ortam ve gizli bilgiler
+.env
+.env.*
+!.env.example
+
+# Editör ve sistem
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
