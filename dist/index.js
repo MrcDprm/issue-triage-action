@@ -13611,7 +13611,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch2(input2, init = void 0) {
+    function fetch3(input2, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
@@ -14566,7 +14566,7 @@ var require_fetch = __commonJS({
       }
     }
     module.exports = {
-      fetch: fetch2,
+      fetch: fetch3,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -19104,7 +19104,7 @@ var require_undici = __commonJS({
     module.exports.setGlobalDispatcher = setGlobalDispatcher;
     module.exports.getGlobalDispatcher = getGlobalDispatcher;
     var fetchImpl = require_fetch().fetch;
-    module.exports.fetch = async function fetch2(init, options = void 0) {
+    module.exports.fetch = async function fetch3(init, options = void 0) {
       try {
         return await fetchImpl(init, options);
       } catch (err) {
@@ -20380,6 +20380,9 @@ function setFailed(message) {
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function warning(message, properties = {}) {
+  issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
 function info(message) {
   process.stdout.write(message + os3.EOL);
 }
@@ -21510,8 +21513,8 @@ function isPlainObject2(value) {
 }
 var noop = () => "";
 async function fetchWrapper(requestOptions) {
-  const fetch2 = requestOptions.request?.fetch || globalThis.fetch;
-  if (!fetch2) {
+  const fetch3 = requestOptions.request?.fetch || globalThis.fetch;
+  if (!fetch3) {
     throw new Error(
       "fetch is not set. Please pass a fetch implementation as new Octokit({ request: { fetch }}). Learn more at https://github.com/octokit/octokit.js/#fetch-missing"
     );
@@ -21527,7 +21530,7 @@ async function fetchWrapper(requestOptions) {
   );
   let fetchResponse;
   try {
-    fetchResponse = await fetch2(requestOptions.url, {
+    fetchResponse = await fetch3(requestOptions.url, {
       method: requestOptions.method,
       body,
       redirect: requestOptions.request?.redirect,
@@ -24547,6 +24550,49 @@ var context2 = new Context();
 function getOctokit(token, options, ...additionalPlugins) {
   const GitHubWithPlugins = GitHub.plugin(...additionalPlugins);
   return new GitHubWithPlugins(getOctokitOptions(token, options));
+}
+
+// src/duplicates.ts
+var EMBED_TEXT_LIMIT = 2e3;
+var TITLE_FALLBACK_LIMIT = 30;
+function embeddingText(title, body) {
+  return `${title}
+
+${body}`.slice(0, EMBED_TEXT_LIMIT);
+}
+function cosine(a, b) {
+  if (a.length !== b.length) throw new Error(`vector sizes differ (${a.length} and ${b.length})`);
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    dot += x * y;
+    normA += x * x;
+    normB += y * y;
+  }
+  return normA === 0 || normB === 0 ? 0 : dot / Math.sqrt(normA * normB);
+}
+function rankBySimilarity(target, others, threshold, k) {
+  return others.map(({ issue: issue3, vector }) => ({ number: issue3.number, title: issue3.title, state: issue3.state, similarity: cosine(target, vector) })).filter((candidate) => candidate.similarity >= threshold).sort((a, b) => b.similarity - a.similarity).slice(0, k);
+}
+async function findDuplicateCandidates(options) {
+  const { llm, issue: issue3, recent, maxCandidates, threshold, useEmbeddings, warn } = options;
+  if (recent.length === 0 || maxCandidates === 0) return { method: "none", candidates: [] };
+  if (useEmbeddings) {
+    try {
+      const [target, ...vectors] = await llm.embed([embeddingText(issue3.title, issue3.body), ...recent.map((r) => embeddingText(r.title, r.body))]);
+      if (target) {
+        const others = recent.map((r, i) => ({ issue: r, vector: vectors[i] ?? [] }));
+        return { method: "embeddings", candidates: rankBySimilarity(target, others, threshold, maxCandidates) };
+      }
+    } catch (error63) {
+      warn(`Embeddings failed, using issue titles instead: ${error63 instanceof Error ? error63.message : String(error63)}`);
+    }
+  }
+  const candidates = recent.slice(0, TITLE_FALLBACK_LIMIT).map((r) => ({ number: r.number, title: r.title, state: r.state, similarity: null }));
+  return { method: "titles", candidates };
 }
 
 // node_modules/zod/v4/classic/external.js
@@ -44318,6 +44364,126 @@ async function findTriageComment(octokit, repo, issueNumber) {
   const found = comments.find((comment) => comment.user?.type === "Bot" && comment.body?.startsWith(TRIAGE_MARKER));
   return found ? { id: found.id, body: found.body ?? "" } : null;
 }
+var RECENT_LIMIT = 100;
+async function fetchRecentIssues(octokit, repo, exclude) {
+  const { data } = await octokit.rest.issues.listForRepo({ ...repo, state: "all", sort: "updated", direction: "desc", per_page: RECENT_LIMIT });
+  return data.filter((issue3) => !issue3.pull_request && issue3.number !== exclude).map((issue3) => ({ number: issue3.number, title: issue3.title, body: issue3.body ?? "", state: issue3.state }));
+}
+
+// src/llm.ts
+var LlmError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = "LlmError";
+  }
+  status;
+};
+var RETRY_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
+var MAX_ATTEMPTS = 3;
+var MAX_WAIT_MS = 1e4;
+var EMBED_BATCH = 100;
+var chatResponse = external_exports.object({
+  choices: external_exports.array(external_exports.object({ message: external_exports.object({ content: external_exports.string().nullish() }) })).min(1)
+});
+var embeddingResponse = external_exports.object({
+  // Gemini 0 olan index'i hiç yazmaz (varsayılan değeri atlar); yoksa listedeki sırası kullanılır.
+  data: external_exports.array(external_exports.object({ index: external_exports.number().int().nonnegative().optional(), embedding: external_exports.array(external_exports.number()).min(1) }))
+});
+function parseBaseUrl(value) {
+  let url2;
+  try {
+    url2 = new URL(value.endsWith("/") ? value : `${value}/`);
+  } catch {
+    throw new LlmError("base-url is not a valid URL");
+  }
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url2.hostname);
+  if (url2.protocol !== "https:" && !(url2.protocol === "http:" && local)) {
+    throw new LlmError("base-url must use https (http is allowed only for localhost)");
+  }
+  return url2;
+}
+function createLlmClient(config2) {
+  const base = parseBaseUrl(config2.baseUrl);
+  const doFetch = config2.fetch ?? fetch;
+  const sleep = config2.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const timeoutMs = config2.timeoutMs ?? 3e4;
+  const redact = (text) => text.split(config2.apiKey).join("***").slice(0, 200);
+  async function post(path, body) {
+    const url2 = new URL(path, base);
+    for (let attempt = 1; ; attempt++) {
+      let response;
+      try {
+        response = await doFetch(url2, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${config2.apiKey}` },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+      } catch (error63) {
+        if (attempt < MAX_ATTEMPTS) {
+          await sleep(backoff(attempt, null));
+          continue;
+        }
+        const reason = error63 instanceof Error ? error63.name : "network error";
+        throw new LlmError(`${path}: request failed (${reason})`);
+      }
+      if (response.ok) {
+        try {
+          return await response.json();
+        } catch {
+          throw new LlmError(`${path}: the answer is not JSON`, response.status);
+        }
+      }
+      if (RETRY_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+        await sleep(backoff(attempt, response.headers.get("retry-after")));
+        continue;
+      }
+      const detail = redact(await response.text().catch(() => ""));
+      throw new LlmError(`${path}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`, response.status);
+    }
+  }
+  async function embedBatch(texts) {
+    const parsed = embeddingResponse.safeParse(await post("embeddings", { model: config2.embeddingModel, input: texts }));
+    if (!parsed.success || parsed.data.data.length !== texts.length) {
+      throw new LlmError("embeddings: the answer does not have one vector per text");
+    }
+    const vectors = [];
+    parsed.data.data.forEach((item, position) => vectors[item.index ?? position] = item.embedding);
+    for (let i = 0; i < texts.length; i++) {
+      if (vectors[i] === void 0) throw new LlmError("embeddings: the answer does not have one vector per text");
+    }
+    return vectors;
+  }
+  return {
+    async chatJson(messages, schema) {
+      const json2 = await post("chat/completions", {
+        model: config2.model,
+        messages,
+        temperature: 0,
+        response_format: { type: "json_schema", json_schema: { name: schema.name, strict: true, schema: schema.schema } }
+      });
+      const parsed = chatResponse.safeParse(json2);
+      const content = parsed.success ? parsed.data.choices[0]?.message.content : null;
+      if (!content) throw new LlmError("chat/completions: the answer has no message");
+      return content;
+    },
+    async embed(texts) {
+      if (texts.length === 0) return [];
+      if (!config2.embeddingModel) throw new LlmError("embeddings: no embedding model is set");
+      const vectors = [];
+      for (let start = 0; start < texts.length; start += EMBED_BATCH) {
+        vectors.push(...await embedBatch(texts.slice(start, start + EMBED_BATCH)));
+      }
+      return vectors;
+    }
+  };
+}
+function backoff(attempt, retryAfter) {
+  const seconds = retryAfter === null ? NaN : Number(retryAfter);
+  const ms = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1e3 : 1e3 * 2 ** (attempt - 1);
+  return Math.min(ms, MAX_WAIT_MS);
+}
 
 // src/main.ts
 async function run() {
@@ -44333,6 +44499,24 @@ async function run() {
     const labelReason = checkLabels(issue3, previous !== null);
     if (labelReason) return skip(labelReason);
     info(`Triaging #${issue3.number} (${event.action})`);
+    const embeddingModel = getInput("embedding-model");
+    const llm = createLlmClient({
+      baseUrl: getInput("base-url"),
+      apiKey: getInput("api-key", { required: true }),
+      model: getInput("model"),
+      embeddingModel
+    });
+    const recent = await fetchRecentIssues(octokit, repo, issue3.number);
+    const { method, candidates } = await findDuplicateCandidates({
+      llm,
+      issue: issue3,
+      recent,
+      maxCandidates: Number(getInput("max-candidates") || 5),
+      threshold: Number(getInput("similarity-threshold") || 0.75),
+      useEmbeddings: embeddingModel !== "",
+      warn: warning
+    });
+    info(`Duplicate candidates (${method}): ${candidates.map((c) => `#${c.number}${c.similarity === null ? "" : ` ${c.similarity.toFixed(2)}`}`).join(", ") || "none"}`);
   } catch (error63) {
     setFailed(error63 instanceof Error ? error63.message : String(error63));
   }

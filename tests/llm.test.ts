@@ -121,6 +121,16 @@ describe('embed', () => {
     expect(await client([answer]).llm.embed(['a', 'b'])).toEqual([[0, 1], [1, 1]])
   })
 
+  it('sends long lists in batches of 100 and keeps the order', async () => {
+    const batch = (from: number, count: number) =>
+      json({ data: Array.from({ length: count }, (_, i) => ({ index: i, embedding: [from + i] })) })
+    const { llm, calls } = client([batch(0, 100), batch(100, 1)])
+    const texts = Array.from({ length: 101 }, (_, i) => `t${i}`)
+    const result = await llm.embed(texts)
+    expect(calls.map((call) => JSON.parse(String(call.init.body)).input.length)).toEqual([100, 1])
+    expect(result.map((vector) => vector[0])).toEqual(texts.map((_, i) => i))
+  })
+
   it('makes no request for an empty list', async () => {
     const { llm, calls } = client([])
     expect(await llm.embed([])).toEqual([])

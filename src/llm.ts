@@ -44,6 +44,7 @@ export class LlmError extends Error {
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504])
 const MAX_ATTEMPTS = 3
 const MAX_WAIT_MS = 10_000
+export const EMBED_BATCH = 100
 
 const chatResponse = z.object({
   choices: z.array(z.object({ message: z.object({ content: z.string().nullish() }) })).min(1),
@@ -115,6 +116,21 @@ export function createLlmClient(config: LlmConfig): LlmClient {
     }
   }
 
+  async function embedBatch(texts: string[]): Promise<number[][]> {
+    const parsed = embeddingResponse.safeParse(await post('embeddings', { model: config.embeddingModel, input: texts }))
+    if (!parsed.success || parsed.data.data.length !== texts.length) {
+      throw new LlmError('embeddings: the answer does not have one vector per text')
+    }
+    // Sağlayıcı sırayı karıştırabilir; index alanına göre dizilir.
+    const vectors: number[][] = []
+    parsed.data.data.forEach((item, position) => (vectors[item.index ?? position] = item.embedding))
+    // Aynı index iki kez gelirse dizide boşluk kalır (some boşlukları atladığı için tek tek bakılır).
+    for (let i = 0; i < texts.length; i++) {
+      if (vectors[i] === undefined) throw new LlmError('embeddings: the answer does not have one vector per text')
+    }
+    return vectors
+  }
+
   return {
     async chatJson(messages, schema) {
       const json = await post('chat/completions', {
@@ -132,16 +148,10 @@ export function createLlmClient(config: LlmConfig): LlmClient {
     async embed(texts) {
       if (texts.length === 0) return []
       if (!config.embeddingModel) throw new LlmError('embeddings: no embedding model is set')
-      const parsed = embeddingResponse.safeParse(await post('embeddings', { model: config.embeddingModel, input: texts }))
-      if (!parsed.success || parsed.data.data.length !== texts.length) {
-        throw new LlmError('embeddings: the answer does not have one vector per text')
-      }
-      // Sağlayıcı sırayı karıştırabilir; index alanına göre dizilir.
+      // Gemini tek istekte en fazla 100 metin kabul eder (101'de HTTP 400); uzun listeler parça parça gönderilir.
       const vectors: number[][] = []
-      parsed.data.data.forEach((item, position) => (vectors[item.index ?? position] = item.embedding))
-      // Aynı index iki kez gelirse dizide boşluk kalır (some boşlukları atladığı için tek tek bakılır).
-      for (let i = 0; i < texts.length; i++) {
-        if (vectors[i] === undefined) throw new LlmError('embeddings: the answer does not have one vector per text')
+      for (let start = 0; start < texts.length; start += EMBED_BATCH) {
+        vectors.push(...(await embedBatch(texts.slice(start, start + EMBED_BATCH))))
       }
       return vectors
     },

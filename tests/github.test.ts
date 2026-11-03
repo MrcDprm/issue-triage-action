@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findTriageComment } from '../src/github.js'
+import { fetchRecentIssues, findTriageComment } from '../src/github.js'
 import { TRIAGE_MARKER } from '../src/issue.js'
 
 type Comment = { id: number; body: string | null; user: { type: string } | null }
@@ -40,5 +40,29 @@ describe('findTriageComment', () => {
   it('returns null when there are no comments or empty ones', async () => {
     expect(await findTriageComment(fakeOctokit([]), repo, 7)).toBeNull()
     expect(await findTriageComment(fakeOctokit([{ id: 5, body: null, user: null }]), repo, 7)).toBeNull()
+  })
+})
+
+describe('fetchRecentIssues', () => {
+  it('asks for recently updated issues of every state and drops pull requests and the issue itself', async () => {
+    let request: Record<string, unknown> = {}
+    const octokit = {
+      rest: {
+        issues: {
+          listForRepo: async (params: Record<string, unknown>) => {
+            request = params
+            return {
+              data: [
+                { number: 7, title: 'itself', body: 'x', state: 'open' },
+                { number: 6, title: 'a PR', body: null, state: 'open', pull_request: { url: 'u' } },
+                { number: 5, title: 'Crash', body: null, state: 'closed' },
+              ],
+            }
+          },
+        },
+      },
+    } as unknown as Parameters<typeof fetchRecentIssues>[0]
+    expect(await fetchRecentIssues(octokit, repo, 7)).toEqual([{ number: 5, title: 'Crash', body: '', state: 'closed' }])
+    expect(request).toMatchObject({ owner: 'o', repo: 'r', state: 'all', sort: 'updated', direction: 'desc', per_page: 100 })
   })
 })
