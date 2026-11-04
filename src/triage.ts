@@ -66,7 +66,7 @@ export async function triage(deps: TriageDeps): Promise<TriageOutcome> {
   log.info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); missing: ${c.missing.join(', ') || 'none'}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(', ') || 'none'}; language: ${c.language}`)
 
   const plan = planLabels(issue.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ''))
-  const commentBody = renderComment({ classification: c, labelState: plan, candidates })
+  const commentBody = renderComment({ classification: c, labelState: plan })
 
   if (inputs.dryRun) {
     // Okuma istekleri yapıldı, yazma yok: bakımcı Action'ı açmadan önce sonucu günlükte görür.

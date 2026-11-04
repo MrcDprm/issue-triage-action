@@ -1,5 +1,4 @@
 import type { Classification, IssueType, Language, MissingDetail } from './classify.js'
-import type { Candidate } from './duplicates.js'
 import { TRIAGE_MARKER } from './issue.js'
 import type { LabelState } from './labels.js'
 
@@ -7,12 +6,11 @@ import type { LabelState } from './labels.js'
 const OWNED_PREFIX = '<!-- issue-triage-labels: '
 const DECLINED_PREFIX = '<!-- issue-triage-declined: '
 const SUFFIX = ' -->'
-export const TITLE_LIMIT = 80
 
 const ZWSP = '​'
 
 /**
- * Yoruma giren serbest metin (modelin gerekçesi, issue başlıkları) şablonu bozamaz:
+ * Yoruma giren serbest metin (modelin gerekçesi) şablonu bozamaz:
  * Markdown/HTML karakterleri kaçışlanır, @ anmaları ve #/GH- referansları kimseyi etiketlemez ve başka
  * issue'lara bağlantı düşmez, adresler tıklanabilir bağlantıya dönmez (oltalama), satır sonları teke iner.
  */
@@ -72,11 +70,10 @@ export interface CommentInput {
   classification: Classification
   /** Bu çalıştırmadan sonraki etiket durumu. */
   labelState: LabelState
-  candidates: Candidate[]
 }
 
-/** Yorumun tamamı şablondan; modelden gelen tek serbest metin gerekçe ve o da temizlenir. */
-export function renderComment({ classification: c, labelState, candidates }: CommentInput): string {
+/** Yorumun tamamı şablondan; tek serbest metin modelin gerekçesi ve o da temizlenir. */
+export function renderComment({ classification: c, labelState }: CommentInput): string {
   const t = TEXT[c.language]
   const label = (name: string) => `\`${name.replace(/`/g, "'")}\``
   const lines = [
@@ -85,17 +82,14 @@ export function renderComment({ classification: c, labelState, candidates }: Com
     markerLine(DECLINED_PREFIX, labelState.declined),
     `### ${t.title}`,
     '',
-    `| | |`,
-    `|---|---|`,
-    `| ${t.type} | ${t.types[c.type]} |`,
-    `| ${t.priority} | **${c.priority}**${c.priorityReason ? `: ${sanitize(c.priorityReason)}` : ''} |`,
-    `| ${t.labels} | ${labelState.owned.length > 0 ? labelState.owned.map(label).join(', ') : t.none} |`,
+    // Tablo yerine liste: GitHub boş başlık satırını da çizdiği için tablo ilk satırda boş bir şerit bırakıyordu.
+    `- **${t.type}:** ${t.types[c.type]}`,
+    `- **${t.priority}:** ${c.priority}${c.priorityReason ? ` (${sanitize(c.priorityReason)})` : ''}`,
+    `- **${t.labels}:** ${labelState.owned.length > 0 ? labelState.owned.map(label).join(', ') : t.none}`,
   ]
 
-  if (c.duplicates.length > 0) {
-    const titles = new Map(candidates.map((candidate) => [candidate.number, candidate.title]))
-    lines.push('', t.duplicates, ...c.duplicates.map((number) => `- #${number} ${sanitize(titles.get(number) ?? '', TITLE_LIMIT)}`.trimEnd()))
-  }
+  // Başlık yazılmaz: GitHub listedeki #12'yi issue başlığı ve durumuyla birlikte kendisi gösterir.
+  if (c.duplicates.length > 0) lines.push('', t.duplicates, ...c.duplicates.map((number) => `- #${number}`))
   if (c.missing.length > 0) {
     lines.push('', t.missingIntro, ...c.missing.map((detail) => `- ${t.missing[detail]}`))
   }
