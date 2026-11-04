@@ -44374,49 +44374,6 @@ function unique(items) {
   return [...new Set(items)];
 }
 
-// src/duplicates.ts
-var EMBED_TEXT_LIMIT = 2e3;
-var TITLE_FALLBACK_LIMIT = 30;
-function embeddingText(title, body) {
-  return `${title}
-
-${body}`.slice(0, EMBED_TEXT_LIMIT);
-}
-function cosine(a, b) {
-  if (a.length !== b.length) throw new Error(`vector sizes differ (${a.length} and ${b.length})`);
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    dot += x * y;
-    normA += x * x;
-    normB += y * y;
-  }
-  return normA === 0 || normB === 0 ? 0 : dot / Math.sqrt(normA * normB);
-}
-function rankBySimilarity(target, others, threshold, k) {
-  return others.map(({ issue: issue3, vector }) => ({ number: issue3.number, title: issue3.title, state: issue3.state, similarity: cosine(target, vector) })).filter((candidate) => candidate.similarity >= threshold).sort((a, b) => b.similarity - a.similarity).slice(0, k);
-}
-async function findDuplicateCandidates(options) {
-  const { llm, issue: issue3, recent, maxCandidates, threshold, useEmbeddings, warn } = options;
-  if (recent.length === 0 || maxCandidates === 0) return { method: "none", candidates: [] };
-  if (useEmbeddings) {
-    try {
-      const [target, ...vectors] = await llm.embed([embeddingText(issue3.title, issue3.body), ...recent.map((r) => embeddingText(r.title, r.body))]);
-      if (target) {
-        const others = recent.map((r, i) => ({ issue: r, vector: vectors[i] ?? [] }));
-        return { method: "embeddings", candidates: rankBySimilarity(target, others, threshold, maxCandidates) };
-      }
-    } catch (error63) {
-      warn(`Embeddings failed, using issue titles instead: ${error63 instanceof Error ? error63.message : String(error63)}`);
-    }
-  }
-  const candidates = recent.slice(0, TITLE_FALLBACK_LIMIT).map((r) => ({ number: r.number, title: r.title, state: r.state, similarity: null }));
-  return { method: "titles", candidates };
-}
-
 // src/issue.ts
 var TRIAGE_MARKER = "<!-- issue-triage -->";
 var HANDLED_ACTIONS = ["opened", "edited", "reopened"];
@@ -44463,6 +44420,136 @@ function checkLabels(issue3, hasTriageComment) {
   return null;
 }
 
+// src/comment.ts
+var OWNED_PREFIX = "<!-- issue-triage-labels: ";
+var DECLINED_PREFIX = "<!-- issue-triage-declined: ";
+var SUFFIX = " -->";
+var TITLE_LIMIT2 = 80;
+var ZWSP = "\u200B";
+function sanitize(text, limit = 300) {
+  return text.replace(/\s+/g, " ").trim().slice(0, limit).replace(/[\\`*_{}[\]()+\-.!|~>]/g, "\\$&").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/@/g, `@${ZWSP}`).replace(/#/g, `#${ZWSP}`).replace(/\bGH\\-/gi, (match) => `${match.slice(0, 2)}${ZWSP}${match.slice(2)}`).replace(/:\/\//g, `:${ZWSP}//`).replace(/www\\\./gi, (match) => `${match.slice(0, 3)}${ZWSP}${match.slice(3)}`);
+}
+var TEXT = {
+  en: {
+    title: "Automatic triage",
+    type: "Type",
+    priority: "Priority",
+    labels: "Labels added",
+    none: "none",
+    types: { bug: "Bug", feature: "Feature request", question: "Question", docs: "Documentation" },
+    duplicates: "This may be the same as:",
+    missingIntro: "To help reproduce this bug, please edit the issue and add:",
+    missing: {
+      version: "the version you use",
+      steps: "the steps to reproduce it",
+      expected: "what you expected to happen",
+      actual: "what happened instead (error message or log)"
+    },
+    footer: "Written by a bot from the issue text; it is updated when the issue is edited. A maintainer will review it."
+  },
+  tr: {
+    title: "Otomatik s\u0131n\u0131fland\u0131rma",
+    type: "T\xFCr",
+    priority: "\xD6ncelik",
+    labels: "Eklenen etiketler",
+    none: "yok",
+    types: { bug: "Hata", feature: "\xD6zellik iste\u011Fi", question: "Soru", docs: "Belgelendirme" },
+    duplicates: "\u015Eununla ayn\u0131 olabilir:",
+    missingIntro: "Hatay\u0131 tekrar olu\u015Fturabilmemiz i\xE7in l\xFCtfen issue'yu d\xFCzenleyip \u015Funlar\u0131 ekleyin:",
+    missing: {
+      version: "kulland\u0131\u011F\u0131n\u0131z s\xFCr\xFCm",
+      steps: "hatay\u0131 olu\u015Fturan ad\u0131mlar",
+      expected: "ne olmas\u0131n\u0131 bekledi\u011Finiz",
+      actual: "bunun yerine ne oldu\u011Fu (hata mesaj\u0131 ya da g\xFCnl\xFCk)"
+    },
+    footer: "Bu yorumu issue metninden bir bot yazd\u0131; issue d\xFCzenlenince g\xFCncellenir. Bir bak\u0131mc\u0131 inceleyecek."
+  }
+};
+function renderComment({ classification: c, labelState, candidates }) {
+  const t = TEXT[c.language];
+  const label = (name) => `\`${name.replace(/`/g, "'")}\``;
+  const lines = [
+    TRIAGE_MARKER,
+    markerLine(OWNED_PREFIX, labelState.owned),
+    markerLine(DECLINED_PREFIX, labelState.declined),
+    `### ${t.title}`,
+    "",
+    `| | |`,
+    `|---|---|`,
+    `| ${t.type} | ${t.types[c.type]} |`,
+    `| ${t.priority} | **${c.priority}**${c.priorityReason ? `: ${sanitize(c.priorityReason)}` : ""} |`,
+    `| ${t.labels} | ${labelState.owned.length > 0 ? labelState.owned.map(label).join(", ") : t.none} |`
+  ];
+  if (c.duplicates.length > 0) {
+    const titles = new Map(candidates.map((candidate) => [candidate.number, candidate.title]));
+    lines.push("", t.duplicates, ...c.duplicates.map((number4) => `- #${number4} ${sanitize(titles.get(number4) ?? "", TITLE_LIMIT2)}`.trimEnd()));
+  }
+  if (c.missing.length > 0) {
+    lines.push("", t.missingIntro, ...c.missing.map((detail) => `- ${t.missing[detail]}`));
+  }
+  lines.push("", `<sub>${t.footer}</sub>`);
+  return lines.join("\n");
+}
+function markerLine(prefix, names) {
+  return `${prefix}${names.map(encodeURIComponent).join(",")}${SUFFIX}`;
+}
+function readMarkerList(body, prefix) {
+  const line = body.split("\n").find((row) => row.startsWith(prefix) && row.endsWith(SUFFIX));
+  const value = line?.slice(prefix.length, -SUFFIX.length) ?? "";
+  if (value === "") return [];
+  try {
+    return value.split(",").map(decodeURIComponent);
+  } catch {
+    return [];
+  }
+}
+function readLabelState(body) {
+  return { owned: readMarkerList(body, OWNED_PREFIX), declined: readMarkerList(body, DECLINED_PREFIX) };
+}
+
+// src/duplicates.ts
+var EMBED_TEXT_LIMIT = 2e3;
+var TITLE_FALLBACK_LIMIT = 30;
+function embeddingText(title, body) {
+  return `${title}
+
+${body}`.slice(0, EMBED_TEXT_LIMIT);
+}
+function cosine(a, b) {
+  if (a.length !== b.length) throw new Error(`vector sizes differ (${a.length} and ${b.length})`);
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    dot += x * y;
+    normA += x * x;
+    normB += y * y;
+  }
+  return normA === 0 || normB === 0 ? 0 : dot / Math.sqrt(normA * normB);
+}
+function rankBySimilarity(target, others, threshold, k) {
+  return others.map(({ issue: issue3, vector }) => ({ number: issue3.number, title: issue3.title, state: issue3.state, similarity: cosine(target, vector) })).filter((candidate) => candidate.similarity >= threshold).sort((a, b) => b.similarity - a.similarity).slice(0, k);
+}
+async function findDuplicateCandidates(options) {
+  const { llm, issue: issue3, recent, maxCandidates, threshold, useEmbeddings, warn } = options;
+  if (recent.length === 0 || maxCandidates === 0) return { method: "none", candidates: [] };
+  if (useEmbeddings) {
+    try {
+      const [target, ...vectors] = await llm.embed([embeddingText(issue3.title, issue3.body), ...recent.map((r) => embeddingText(r.title, r.body))]);
+      if (target) {
+        const others = recent.map((r, i) => ({ issue: r, vector: vectors[i] ?? [] }));
+        return { method: "embeddings", candidates: rankBySimilarity(target, others, threshold, maxCandidates) };
+      }
+    } catch (error63) {
+      warn(`Embeddings failed, using issue titles instead: ${error63 instanceof Error ? error63.message : String(error63)}`);
+    }
+  }
+  const candidates = recent.slice(0, TITLE_FALLBACK_LIMIT).map((r) => ({ number: r.number, title: r.title, state: r.state, similarity: null }));
+  return { method: "titles", candidates };
+}
+
 // src/github.ts
 async function findTriageComment(octokit, repo, issueNumber) {
   const comments = await octokit.paginate(octokit.rest.issues.listComments, { ...repo, issue_number: issueNumber, per_page: 100 });
@@ -44477,6 +44564,59 @@ async function fetchRecentIssues(octokit, repo, exclude) {
 async function fetchLabels(octokit, repo) {
   const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, { ...repo, per_page: 100 });
   return labels.map((label) => ({ name: label.name, description: label.description ?? "" }));
+}
+async function addLabels(octokit, repo, issueNumber, labels) {
+  if (labels.length > 0) await octokit.rest.issues.addLabels({ ...repo, issue_number: issueNumber, labels });
+}
+async function removeLabels(octokit, repo, issueNumber, labels) {
+  for (const name of labels) {
+    try {
+      await octokit.rest.issues.removeLabel({ ...repo, issue_number: issueNumber, name });
+    } catch (error63) {
+      if (error63.status !== 404) throw error63;
+    }
+  }
+}
+async function upsertTriageComment(octokit, repo, issueNumber, previous, body) {
+  if (previous === null) {
+    await octokit.rest.issues.createComment({ ...repo, issue_number: issueNumber, body });
+    return "created";
+  }
+  if (previous.body === body) return "unchanged";
+  await octokit.rest.issues.updateComment({ ...repo, comment_id: previous.id, body });
+  return "updated";
+}
+
+// src/labels.ts
+var TYPE_NAMES = {
+  bug: ["bug"],
+  feature: ["feature", "enhancement", "feature request"],
+  question: ["question"],
+  docs: ["documentation", "docs"]
+};
+function normalizeLabel(name) {
+  return name.toLowerCase().replace(/^(type|kind|priority|prio)\s*[:/-]\s*/, "").trim();
+}
+function matchingLabels(type, priority, labels) {
+  const find = (names) => names.map((wanted) => labels.find((label) => normalizeLabel(label.name) === wanted)?.name).find((name) => name !== void 0);
+  return [find(TYPE_NAMES[type]), find([priority.toLowerCase()])].filter((name) => name !== void 0);
+}
+function wantedLabels(classification, labels) {
+  return [.../* @__PURE__ */ new Set([...matchingLabels(classification.type, classification.priority, labels), ...classification.labels])];
+}
+function planLabels(current, wanted, previous) {
+  const has = new Set(current);
+  const owned = new Set(previous.owned.filter((name) => has.has(name)));
+  const declined = /* @__PURE__ */ new Set([...previous.declined, ...previous.owned.filter((name) => !has.has(name))]);
+  const add = wanted.filter((name) => !has.has(name) && !declined.has(name));
+  const remove = [...owned].filter((name) => !wanted.includes(name));
+  return {
+    add,
+    remove,
+    owned: wanted.filter((name) => add.includes(name) || owned.has(name)),
+    // İnsan etiketi geri eklediyse artık onundur; reddedilenler listesinde tutmaya gerek yok.
+    declined: [...declined].filter((name) => !has.has(name))
+  };
 }
 
 // src/llm.ts
@@ -44636,8 +44776,18 @@ async function run() {
     if (!result.ok) return warning(`Classification skipped: ${result.reason}`);
     const c = result.classification;
     info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); labels: ${c.labels.join(", ") || "none"}; missing: ${c.missing.join(", ") || "none"}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(", ") || "none"}; language: ${c.language}`);
+    const plan = planLabels(issue3.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ""));
+    const commentBody = renderComment({ classification: c, labelState: plan, candidates });
+    const commentResult = await upsertTriageComment(octokit, repo, issue3.number, previous, commentBody);
+    await addLabels(octokit, repo, issue3.number, plan.add);
+    await removeLabels(octokit, repo, issue3.number, plan.remove);
+    info(`Comment ${commentResult}; labels added: ${plan.add.join(", ") || "none"}; removed: ${plan.remove.join(", ") || "none"}`);
   } catch (error63) {
     if (error63 instanceof LlmError) return warning(`LLM request failed: ${error63.message}`);
+    if (error63.status === 403) {
+      const message = error63 instanceof Error ? error63.message : "";
+      return setFailed(`GitHub refused the request (403: ${message}). If it is a permission error, add "permissions: issues: write" to the workflow.`);
+    }
     setFailed(error63 instanceof Error ? error63.message : String(error63));
   }
 }
