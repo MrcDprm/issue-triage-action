@@ -41,6 +41,14 @@ export class LlmError extends Error {
   }
 }
 
+/** Yanlış input: Action kırmızı biter, çünkü kullanıcının düzeltmesi gerekir (LlmError ise geçici sayılır). */
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ConfigError'
+  }
+}
+
 const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504])
 const MAX_ATTEMPTS = 3
 const MAX_WAIT_MS = 10_000
@@ -61,11 +69,11 @@ export function parseBaseUrl(value: string): URL {
   try {
     url = new URL(value.endsWith('/') ? value : `${value}/`)
   } catch {
-    throw new LlmError('base-url is not a valid URL')
+    throw new ConfigError('base-url is not a valid URL')
   }
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
-    throw new LlmError('base-url must use https (http is allowed only for localhost)')
+    throw new ConfigError('base-url must use https (http is allowed only for localhost)')
   }
   return url
 }
