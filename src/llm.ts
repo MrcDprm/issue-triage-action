@@ -120,7 +120,13 @@ export function createLlmClient(config: LlmConfig): LlmClient {
         continue
       }
       const detail = redact(await response.text().catch(() => ''))
-      throw new LlmError(`${path}: HTTP ${response.status}${detail ? ` ${detail}` : ''}`, response.status)
+      const message = `${path}: HTTP ${response.status}${detail ? ` ${detail}` : ''}`
+      // Diğer 4xx kalıcıdır: yanlış anahtar (Gemini 400, diğerleri 401/403) ya da yanlış model adı (404).
+      // Tekrar denemek düzeltmez; kullanıcı ayarı düzeltmeli, bu yüzden Action kırmızı biter.
+      if (response.status >= 400 && response.status < 500 && !RETRY_STATUSES.has(response.status)) {
+        throw new ConfigError(`${message} (the provider rejected the request; check api-key, base-url and model)`)
+      }
+      throw new LlmError(message, response.status)
     }
   }
 

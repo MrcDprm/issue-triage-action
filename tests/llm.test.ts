@@ -80,10 +80,27 @@ describe('chatJson', () => {
     expect(waits).toEqual([1000, 2000])
   })
 
-  it('does not retry a request the provider rejects', async () => {
-    const { llm, calls } = client([json({ error: 'bad model' }, 400)])
-    await expect(llm.chatJson([], schema)).rejects.toMatchObject({ status: 400 })
-    expect(calls).toHaveLength(1)
+  it('does not retry a request the provider rejects and reports it as a config error', async () => {
+    for (const status of [400, 401, 403, 404]) {
+      const { llm, calls } = client([json({ error: 'bad model' }, status)])
+      const error = await llm.chatJson([], schema).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(ConfigError)
+      expect((error as Error).message).toContain(`HTTP ${status}`)
+      expect((error as Error).message).toContain('check api-key, base-url and model')
+      expect(calls).toHaveLength(1)
+    }
+  })
+
+  it('keeps 429 and 408 as passing provider errors after the last retry', async () => {
+    for (const status of [408, 429]) {
+      const { llm } = client([json({}, status), json({}, status), json({}, status)])
+      await expect(llm.chatJson([], schema)).rejects.toMatchObject({ name: 'LlmError', status })
+    }
+  })
+
+  it('keeps a server error that does not pass as a provider error', async () => {
+    const { llm } = client([json({}, 501)])
+    await expect(llm.chatJson([], schema)).rejects.toMatchObject({ name: 'LlmError', status: 501 })
   })
 
   it('never puts the key into an error message, even if the provider echoes it', async () => {

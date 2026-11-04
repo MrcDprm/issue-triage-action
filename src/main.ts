@@ -1,7 +1,7 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { readInputs } from './inputs.js'
-import { createLlmClient, LlmError } from './llm.js'
+import { ConfigError, createLlmClient, LlmError } from './llm.js'
 import { triage } from './triage.js'
 
 // GitHub Actions'a bağlanan ince katman: girdileri okur, istemcileri kurar, sonucu çıktılara yazar.
@@ -32,6 +32,7 @@ export async function run(): Promise<void> {
   } catch (error) {
     // Sağlayıcı ya da ağ hatası (kota, kesinti) issue akışını bloklamaz; uyarı olarak görünür.
     if (error instanceof LlmError) return core.warning(`LLM request failed: ${error.message}`)
+    if (error instanceof ConfigError) return core.setFailed(error.message)
     // Yazma izni yoksa GitHub 403 döner (hız sınırında da 403 gelebilir, mesaj korunur).
     if ((error as { status?: number }).status === 403) {
       const message = error instanceof Error ? error.message : ''
