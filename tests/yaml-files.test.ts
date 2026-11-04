@@ -13,3 +13,24 @@ describe('YAML files', () => {
     expect(document.errors.map((error) => error.message)).toEqual([])
   })
 })
+
+describe('triage workflow', () => {
+  const workflow = parseDocument(readFileSync(new URL('.github/workflows/triage.yml', root), 'utf8')).toJS() as {
+    on: Record<string, unknown>
+    permissions: Record<string, string>
+    jobs: { triage: { steps: { uses?: string; with?: Record<string, string> }[] } }
+  }
+
+  it('asks only for the permissions it needs', () => {
+    expect(workflow.permissions).toEqual({ contents: 'read', issues: 'write' })
+  })
+
+  it('runs only on issue events, never on pull_request_target', () => {
+    expect(Object.keys(workflow.on)).toEqual(['issues'])
+  })
+
+  it('takes the key from a secret', () => {
+    const step = workflow.jobs.triage.steps.find((s) => s.uses === './')
+    expect(step?.with?.['api-key']).toBe('${{ secrets.GEMINI_API_KEY }}')
+  })
+})
