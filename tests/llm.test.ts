@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backoff, createLlmClient, LlmError, parseBaseUrl, type LlmConfig } from '../src/llm.js'
+import { backoff, ConfigError, createLlmClient, parseBaseUrl, type LlmConfig } from '../src/llm.js'
 
 const KEY = 'sk-test-secret-123'
 
@@ -45,7 +45,7 @@ describe('parseBaseUrl', () => {
   })
 
   it('refuses plain http to another machine, which would send the key in clear text', () => {
-    expect(() => parseBaseUrl('http://a.example/v1/')).toThrow(LlmError)
+    expect(() => parseBaseUrl('http://a.example/v1/')).toThrow(ConfigError)
   })
 
   it('allows http to this machine (Ollama)', () => {
