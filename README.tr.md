@@ -78,7 +78,7 @@ jobs:
 | `model` | `gemini-3.1-flash-lite` | Issue'yu sınıflandıran sohbet modeli. |
 | `embedding-model` | `gemini-embedding-001` | Tekrar bulma için embedding modeli. Sağlayıcıda yoksa boş bırakın. |
 | `github-token` | `${{ github.token }}` | Issue'ları okumak, etiket ve yorum yazmak için token. |
-| `max-candidates` | `5` | Modele olası tekrar olarak gösterilen benzer issue sayısı (0-20, 0 kapatır). |
+| `max-candidates` | `5` | Modele olası tekrar olarak gösterilen benzer issue sayısı (0-20, 0 kapatır). Embedding modeli yoksa bunun yerine son 30 issue başlığı gösterilir. |
 | `similarity-threshold` | `0.75` | Tekrar adayı için en düşük kosinüs benzerliği (0-1). |
 | `dry-run` | `false` | Issue'ya değil, yalnızca günlüğe yaz. |
 
@@ -112,7 +112,7 @@ Yerel Ollama (`http://localhost:11434/v1`) kendi sunucunuzdaki (self-hosted) run
 - **Yorum şablondan üretilir.** Tek serbest metin modelin öncelik gerekçesidir; kaçışlanır, anmalar, issue referansları ve bağlantılar etkisizleştirilir: kimse etiketlenmez, hiçbir bağlantı tıklanamaz.
 - **En az yetki:** İş akışı yalnızca `issues: write` ve `contents: read` ister, `pull_request_target` kullanmaz.
 - **Anahtar** secret'ta kalır, günlüklerde maskelenir ve hata mesajlarından silinir.
-- **Kota:** Issue metni gönderilmeden önce kırpılır; her issue en fazla bir sohbet ve bir-iki embedding isteğine mal olur.
+- **Kota:** Issue metni gönderilmeden önce kırpılır; her issue en fazla bir sohbet ve bir-iki embedding isteğine mal olur. Public bir repoda issue açabilen ya da düzenleyebilen herkes anahtarınızın kotasından harcar; kota bitince çalıştırma uyarıyla biter, issue'larınız etkilenmez.
 - **Gizlilik:** Gemini'nin ücretsiz katmanında Google istekleri ürünlerini geliştirmek için kullanabilir. Gizli repolarda ücretli anahtar ya da başka bir sağlayıcı kullanın.
 
 ## Öğrendiklerim
