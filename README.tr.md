@@ -1,6 +1,6 @@
 [English](README.md) | Türkçe
 
-# Issue Triage Action
+# LLM Issue Triage
 
 Yeni issue'ları bir LLM ile otomatik sınıflandıran GitHub Action. Her issue'yu reponun kendi etiketleriyle türüne ve önceliğine göre etiketler, olası tekrar issue'ları bulur, hata kaydında eksik bilgileri issue sahibinden ister ve hepsini tek bir kısa yorumda yazar. Ücretsiz bir Gemini API anahtarıyla çalışır; OpenAI uyumlu her sağlayıcıyla da kullanılabilir (Groq, OpenAI, yerel Ollama).
 

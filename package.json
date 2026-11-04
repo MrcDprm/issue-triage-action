@@ -1,6 +1,6 @@
 {
   "name": "issue-triage-action",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "GitHub Action that triages new issues with an LLM: type, labels, priority, duplicates and missing details.",
   "license": "MIT",

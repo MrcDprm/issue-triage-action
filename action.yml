@@ -1,4 +1,4 @@
-name: Issue Triage Action
+name: LLM Issue Triage
 description: Triages new issues with an LLM (type, labels, priority, duplicates, missing details); works with a free Gemini key.
 author: Miraç Deprem
 
