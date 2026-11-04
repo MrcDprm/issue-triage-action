@@ -44381,7 +44381,11 @@ function createLlmClient(config2) {
         continue;
       }
       const detail = redact(await response.text().catch(() => ""));
-      throw new LlmError(`${path}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`, response.status);
+      const message = `${path}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`;
+      if (response.status >= 400 && response.status < 500 && !RETRY_STATUSES.has(response.status)) {
+        throw new ConfigError(`${message} (the provider rejected the request; check api-key, base-url and model)`);
+      }
+      throw new LlmError(message, response.status);
     }
   }
   async function embedBatch(texts) {
@@ -44883,6 +44887,7 @@ async function run() {
     setOutput("duplicates", c.duplicates.join(","));
   } catch (error63) {
     if (error63 instanceof LlmError) return warning(`LLM request failed: ${error63.message}`);
+    if (error63 instanceof ConfigError) return setFailed(error63.message);
     if (error63.status === 403) {
       const message = error63 instanceof Error ? error63.message : "";
       return setFailed(`GitHub refused the request (403: ${message}). If it is a permission error, add "permissions: issues: write" to the workflow.`);
