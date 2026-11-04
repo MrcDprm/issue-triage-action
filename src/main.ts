@@ -1,12 +1,14 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { classifyIssue } from './classify.js'
+import { readLabelState, renderComment } from './comment.js'
 import { findDuplicateCandidates } from './duplicates.js'
-import { fetchLabels, fetchRecentIssues, findTriageComment } from './github.js'
+import { addLabels, fetchLabels, fetchRecentIssues, findTriageComment, removeLabels, upsertTriageComment } from './github.js'
 import { checkEvent, checkLabels } from './issue.js'
+import { planLabels, wantedLabels } from './labels.js'
 import { createLlmClient, LlmError } from './llm.js'
 
-// İş akışını yöneten fonksiyon. Sonraki adımlar: etiket ve yorum (#6), girdi doğrulaması (#7).
+// İş akışını yöneten fonksiyon. Sonraki adım: girdi doğrulaması, çıktılar ve dry-run (#7).
 export async function run(): Promise<void> {
   try {
     // Anahtar günlükte geçerse GitHub onu *** olarak gösterir.
@@ -52,9 +54,23 @@ export async function run(): Promise<void> {
     if (!result.ok) return core.warning(`Classification skipped: ${result.reason}`)
     const c = result.classification
     core.info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); labels: ${c.labels.join(', ') || 'none'}; missing: ${c.missing.join(', ') || 'none'}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(', ') || 'none'}; language: ${c.language}`)
+
+    const plan = planLabels(issue.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ''))
+    // Önce yorum: etiket isteği yarıda kalsa bile botun hangi etiketleri sahiplendiği kaybolmaz
+    // (yorumda yazıp issue'da olmayan etiket sonraki çalıştırmada sahiplenilmiş sayılmaz).
+    const commentBody = renderComment({ classification: c, labelState: plan, candidates })
+    const commentResult = await upsertTriageComment(octokit, repo, issue.number, previous, commentBody)
+    await addLabels(octokit, repo, issue.number, plan.add)
+    await removeLabels(octokit, repo, issue.number, plan.remove)
+    core.info(`Comment ${commentResult}; labels added: ${plan.add.join(', ') || 'none'}; removed: ${plan.remove.join(', ') || 'none'}`)
   } catch (error) {
     // Sağlayıcı ya da ağ hatası (kota, kesinti) issue akışını bloklamaz; uyarı olarak görünür.
     if (error instanceof LlmError) return core.warning(`LLM request failed: ${error.message}`)
+    // Yazma izni yoksa GitHub 403 döner (hız sınırında da 403 gelebilir, mesaj korunur).
+    if ((error as { status?: number }).status === 403) {
+      const message = error instanceof Error ? error.message : ''
+      return core.setFailed(`GitHub refused the request (403: ${message}). If it is a permission error, add "permissions: issues: write" to the workflow.`)
+    }
     // Beklenmeyen hata: iş akışı kırmızıya döner, mesaj günlükte görünür.
     core.setFailed(error instanceof Error ? error.message : String(error))
   }

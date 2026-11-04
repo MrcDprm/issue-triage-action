@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fetchLabels, fetchRecentIssues, findTriageComment } from '../src/github.js'
+import { addLabels, fetchLabels, fetchRecentIssues, findTriageComment, removeLabels, upsertTriageComment } from '../src/github.js'
 import { TRIAGE_MARKER } from '../src/issue.js'
 
 type Comment = { id: number; body: string | null; user: { type: string } | null }
@@ -85,5 +85,56 @@ describe('fetchLabels', () => {
       { name: 'bug', description: "Something isn't working" },
       { name: 'P1', description: '' },
     ])
+  })
+})
+
+/** Yazma çağrılarını kaydeden sahte istemci; removeLabel istenen etiketler için hata atabilir. */
+function writingOctokit(removeErrors: Record<string, number> = {}) {
+  const calls: [string, Record<string, unknown>][] = []
+  const record = (name: string) => async (params: Record<string, unknown>) => {
+    calls.push([name, params])
+    const status = name === 'removeLabel' ? removeErrors[params.name as string] : undefined
+    if (status) throw Object.assign(new Error(`HTTP ${status}`), { status })
+    return {}
+  }
+  const octokit = {
+    rest: { issues: { addLabels: record('addLabels'), removeLabel: record('removeLabel'), createComment: record('createComment'), updateComment: record('updateComment') } },
+  } as unknown as Parameters<typeof addLabels>[0]
+  return { octokit, calls }
+}
+
+describe('addLabels and removeLabels', () => {
+  it('adds labels in one request and sends nothing for an empty list', async () => {
+    const { octokit, calls } = writingOctokit()
+    await addLabels(octokit, repo, 7, [])
+    await addLabels(octokit, repo, 7, ['bug', 'P1'])
+    expect(calls).toEqual([['addLabels', { owner: 'o', repo: 'r', issue_number: 7, labels: ['bug', 'P1'] }]])
+  })
+
+  it('ignores a label someone already removed (404) but not other errors', async () => {
+    const { octokit, calls } = writingOctokit({ P1: 404 })
+    await removeLabels(octokit, repo, 7, ['P1', 'P2'])
+    expect(calls.map(([, params]) => params.name)).toEqual(['P1', 'P2'])
+    await expect(removeLabels(writingOctokit({ P1: 403 }).octokit, repo, 7, ['P1'])).rejects.toThrow('HTTP 403')
+  })
+})
+
+describe('upsertTriageComment', () => {
+  it('creates a comment when there is none', async () => {
+    const { octokit, calls } = writingOctokit()
+    expect(await upsertTriageComment(octokit, repo, 7, null, 'body')).toBe('created')
+    expect(calls).toEqual([['createComment', { owner: 'o', repo: 'r', issue_number: 7, body: 'body' }]])
+  })
+
+  it('updates the same comment when the issue is edited', async () => {
+    const { octokit, calls } = writingOctokit()
+    expect(await upsertTriageComment(octokit, repo, 7, { id: 42, body: 'old' }, 'new')).toBe('updated')
+    expect(calls).toEqual([['updateComment', { owner: 'o', repo: 'r', comment_id: 42, body: 'new' }]])
+  })
+
+  it('sends nothing when the text did not change', async () => {
+    const { octokit, calls } = writingOctokit()
+    expect(await upsertTriageComment(octokit, repo, 7, { id: 42, body: 'same' }, 'same')).toBe('unchanged')
+    expect(calls).toEqual([])
   })
 })

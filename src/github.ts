@@ -49,3 +49,30 @@ export async function fetchLabels(octokit: Octokit, repo: Repo): Promise<RepoLab
   const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, { ...repo, per_page: 100 })
   return labels.map((label) => ({ name: label.name, description: label.description ?? '' }))
 }
+
+/** Etiketleri ekler; issue'daki diğer etiketlere dokunmaz (addLabels var olanları silmez). */
+export async function addLabels(octokit: Octokit, repo: Repo, issueNumber: number, labels: string[]): Promise<void> {
+  if (labels.length > 0) await octokit.rest.issues.addLabels({ ...repo, issue_number: issueNumber, labels })
+}
+
+/** Botun kendi eklediği etiketleri kaldırır; biri zaten kaldırdıysa (404) sorun sayılmaz. */
+export async function removeLabels(octokit: Octokit, repo: Repo, issueNumber: number, labels: string[]): Promise<void> {
+  for (const name of labels) {
+    try {
+      await octokit.rest.issues.removeLabel({ ...repo, issue_number: issueNumber, name })
+    } catch (error) {
+      if ((error as { status?: number }).status !== 404) throw error
+    }
+  }
+}
+
+/** Önceki yorum varsa onu günceller, yoksa yeni yorum yazar: issue'da her zaman tek bot yorumu olur. */
+export async function upsertTriageComment(octokit: Octokit, repo: Repo, issueNumber: number, previous: TriageComment | null, body: string): Promise<'created' | 'updated' | 'unchanged'> {
+  if (previous === null) {
+    await octokit.rest.issues.createComment({ ...repo, issue_number: issueNumber, body })
+    return 'created'
+  }
+  if (previous.body === body) return 'unchanged'
+  await octokit.rest.issues.updateComment({ ...repo, comment_id: previous.id, body })
+  return 'updated'
+}
