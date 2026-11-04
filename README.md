@@ -1,6 +1,6 @@
 English | [Türkçe](README.tr.md)
 
-# Issue Triage Action
+# LLM Issue Triage
 
 A GitHub Action that triages new issues automatically with an LLM. It labels each issue by type and priority with the repository's own labels, finds possible duplicates, asks the author for missing bug details, and writes everything as one short comment. It runs on a free Gemini API key and also works with any OpenAI-compatible provider (Groq, OpenAI, a local Ollama).
 
