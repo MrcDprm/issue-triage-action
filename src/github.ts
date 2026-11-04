@@ -38,3 +38,14 @@ export async function fetchRecentIssues(octokit: Octokit, repo: Repo, exclude: n
     .filter((issue) => !issue.pull_request && issue.number !== exclude)
     .map((issue) => ({ number: issue.number, title: issue.title, body: issue.body ?? '', state: issue.state }))
 }
+
+export interface RepoLabel {
+  name: string
+  description: string
+}
+
+/** Reponun bütün etiketleri; model sadece bunlardan seçebilir, yeni etiket açılmaz. */
+export async function fetchLabels(octokit: Octokit, repo: Repo): Promise<RepoLabel[]> {
+  const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, { ...repo, per_page: 100 })
+  return labels.map((label) => ({ name: label.name, description: label.description ?? '' }))
+}

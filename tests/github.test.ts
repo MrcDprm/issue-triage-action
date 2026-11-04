@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fetchRecentIssues, findTriageComment } from '../src/github.js'
+import { fetchLabels, fetchRecentIssues, findTriageComment } from '../src/github.js'
 import { TRIAGE_MARKER } from '../src/issue.js'
 
 type Comment = { id: number; body: string | null; user: { type: string } | null }
@@ -64,5 +64,26 @@ describe('fetchRecentIssues', () => {
     } as unknown as Parameters<typeof fetchRecentIssues>[0]
     expect(await fetchRecentIssues(octokit, repo, 7)).toEqual([{ number: 5, title: 'Crash', body: '', state: 'closed' }])
     expect(request).toMatchObject({ owner: 'o', repo: 'r', state: 'all', sort: 'updated', direction: 'desc', per_page: 100 })
+  })
+})
+
+describe('fetchLabels', () => {
+  it('reads every page of labels and turns a missing description into an empty string', async () => {
+    const listLabelsForRepo = () => undefined
+    const octokit = {
+      rest: { issues: { listLabelsForRepo } },
+      paginate: async (method: unknown, params: Record<string, unknown>) => {
+        expect(method).toBe(listLabelsForRepo)
+        expect(params).toMatchObject({ owner: 'o', repo: 'r', per_page: 100 })
+        return [
+          { name: 'bug', description: "Something isn't working" },
+          { name: 'P1', description: null },
+        ]
+      },
+    } as unknown as Parameters<typeof fetchLabels>[0]
+    expect(await fetchLabels(octokit, repo)).toEqual([
+      { name: 'bug', description: "Something isn't working" },
+      { name: 'P1', description: '' },
+    ])
   })
 })

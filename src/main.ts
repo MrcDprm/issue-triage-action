@@ -1,11 +1,12 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
+import { classifyIssue } from './classify.js'
 import { findDuplicateCandidates } from './duplicates.js'
-import { fetchRecentIssues, findTriageComment } from './github.js'
+import { fetchLabels, fetchRecentIssues, findTriageComment } from './github.js'
 import { checkEvent, checkLabels } from './issue.js'
-import { createLlmClient } from './llm.js'
+import { createLlmClient, LlmError } from './llm.js'
 
-// İş akışını yöneten fonksiyon. Sonraki adımlar: sınıflandırma (#5), etiket ve yorum (#6), girdi doğrulaması (#7).
+// İş akışını yöneten fonksiyon. Sonraki adımlar: etiket ve yorum (#6), girdi doğrulaması (#7).
 export async function run(): Promise<void> {
   try {
     // Anahtar günlükte geçerse GitHub onu *** olarak gösterir.
@@ -34,7 +35,7 @@ export async function run(): Promise<void> {
       embeddingModel,
     })
 
-    const recent = await fetchRecentIssues(octokit, repo, issue.number)
+    const [labels, recent] = await Promise.all([fetchLabels(octokit, repo), fetchRecentIssues(octokit, repo, issue.number)])
     const { method, candidates } = await findDuplicateCandidates({
       llm,
       issue,
@@ -45,7 +46,15 @@ export async function run(): Promise<void> {
       warn: core.warning,
     })
     core.info(`Duplicate candidates (${method}): ${candidates.map((c) => `#${c.number}${c.similarity === null ? '' : ` ${c.similarity.toFixed(2)}`}`).join(', ') || 'none'}`)
+
+    const result = await classifyIssue(llm, { issue, labels, candidates })
+    // Modelin bozuk cevabı issue akışını durdurmaz: uyarı yazılır, iş başarılı biter.
+    if (!result.ok) return core.warning(`Classification skipped: ${result.reason}`)
+    const c = result.classification
+    core.info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); labels: ${c.labels.join(', ') || 'none'}; missing: ${c.missing.join(', ') || 'none'}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(', ') || 'none'}; language: ${c.language}`)
   } catch (error) {
+    // Sağlayıcı ya da ağ hatası (kota, kesinti) issue akışını bloklamaz; uyarı olarak görünür.
+    if (error instanceof LlmError) return core.warning(`LLM request failed: ${error.message}`)
     // Beklenmeyen hata: iş akışı kırmızıya döner, mesaj günlükte görünür.
     core.setFailed(error instanceof Error ? error.message : String(error))
   }
