@@ -27,7 +27,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   max-candidates:
-    description: How many similar issues are shown to the model as possible duplicates.
+    description: How many similar issues (0-20) are shown to the model as possible duplicates; 0 turns duplicate search off.
     required: false
     default: '5'
   similarity-threshold:
@@ -41,11 +41,11 @@ inputs:
 
 outputs:
   type:
-    description: bug, feature, question or docs.
+    description: bug, feature, question or docs. All outputs are empty when the issue is skipped.
   priority:
     description: P0, P1, P2 or P3.
   labels:
-    description: Labels added, comma-separated.
+    description: Labels the action put on the issue, comma-separated (in dry-run, the labels it would put).
   duplicates:
     description: Possible duplicate issue numbers, comma-separated.
 

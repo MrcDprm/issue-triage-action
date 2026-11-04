@@ -4091,11 +4091,11 @@ var require_util2 = __commonJS({
     var { isUint8Array } = __require("node:util/types");
     var { webidl } = require_webidl();
     var supportedHashes = [];
-    var crypto;
+    var crypto2;
     try {
-      crypto = __require("node:crypto");
+      crypto2 = __require("node:crypto");
       const possibleRelevantHashes = ["sha256", "sha384", "sha512"];
-      supportedHashes = crypto.getHashes().filter((hash2) => possibleRelevantHashes.includes(hash2));
+      supportedHashes = crypto2.getHashes().filter((hash2) => possibleRelevantHashes.includes(hash2));
     } catch {
     }
     function responseURL(response) {
@@ -4368,7 +4368,7 @@ var require_util2 = __commonJS({
       }
     }
     function bytesMatch(bytes, metadataList) {
-      if (crypto === void 0) {
+      if (crypto2 === void 0) {
         return true;
       }
       const parsedMetadata = parseMetadata(metadataList);
@@ -4383,7 +4383,7 @@ var require_util2 = __commonJS({
       for (const item of metadata) {
         const algorithm = item.algo;
         const expectedValue = item.hash;
-        let actualValue = crypto.createHash(algorithm).update(bytes).digest("base64");
+        let actualValue = crypto2.createHash(algorithm).update(bytes).digest("base64");
         if (actualValue[actualValue.length - 1] === "=") {
           if (actualValue[actualValue.length - 2] === "=") {
             actualValue = actualValue.slice(0, -2);
@@ -5447,8 +5447,8 @@ var require_body = __commonJS({
     var { multipartFormDataParser } = require_formdata_parser();
     var random;
     try {
-      const crypto = __require("node:crypto");
-      random = (max) => crypto.randomInt(0, max);
+      const crypto2 = __require("node:crypto");
+      random = (max) => crypto2.randomInt(0, max);
     } catch {
       random = (max) => Math.floor(Math.random(max));
     }
@@ -17087,13 +17087,13 @@ var require_frame = __commonJS({
     "use strict";
     var { maxUnsigned16Bit } = require_constants5();
     var BUFFER_SIZE = 16386;
-    var crypto;
+    var crypto2;
     var buffer = null;
     var bufIdx = BUFFER_SIZE;
     try {
-      crypto = __require("node:crypto");
+      crypto2 = __require("node:crypto");
     } catch {
-      crypto = {
+      crypto2 = {
         // not full compatibility, but minimum.
         randomFillSync: function randomFillSync(buffer2, _offset, _size2) {
           for (let i = 0; i < buffer2.length; ++i) {
@@ -17106,7 +17106,7 @@ var require_frame = __commonJS({
     function generateMask() {
       if (bufIdx === BUFFER_SIZE) {
         bufIdx = 0;
-        crypto.randomFillSync(buffer ??= Buffer.allocUnsafe(BUFFER_SIZE), 0, BUFFER_SIZE);
+        crypto2.randomFillSync(buffer ??= Buffer.allocUnsafe(BUFFER_SIZE), 0, BUFFER_SIZE);
       }
       return [buffer[bufIdx++], buffer[bufIdx++], buffer[bufIdx++], buffer[bufIdx++]];
     }
@@ -17178,9 +17178,9 @@ var require_connection = __commonJS({
     var { Headers: Headers2, getHeadersList } = require_headers();
     var { getDecodeSplit } = require_util2();
     var { WebsocketFrameSend } = require_frame();
-    var crypto;
+    var crypto2;
     try {
-      crypto = __require("node:crypto");
+      crypto2 = __require("node:crypto");
     } catch {
     }
     function establishWebSocketConnection(url2, protocols, client, ws, onEstablish, options) {
@@ -17200,7 +17200,7 @@ var require_connection = __commonJS({
         const headersList = getHeadersList(new Headers2(options.headers));
         request2.headersList = headersList;
       }
-      const keyValue = crypto.randomBytes(16).toString("base64");
+      const keyValue = crypto2.randomBytes(16).toString("base64");
       request2.headersList.append("sec-websocket-key", keyValue);
       request2.headersList.append("sec-websocket-version", "13");
       for (const protocol of protocols) {
@@ -17230,7 +17230,7 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest = crypto.createHash("sha1").update(keyValue + uid).digest("base64");
+          const digest = crypto2.createHash("sha1").update(keyValue + uid).digest("base64");
           if (secWSAccept !== digest) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
@@ -19996,8 +19996,36 @@ function escapeProperty(s) {
   return toCommandValue(s).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 
+// node_modules/@actions/core/lib/file-command.js
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as os2 from "os";
+function issueFileCommand(command, message) {
+  const filePath = process.env[`GITHUB_${command}`];
+  if (!filePath) {
+    throw new Error(`Unable to find environment variable for file command ${command}`);
+  }
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing file at path: ${filePath}`);
+  }
+  fs.appendFileSync(filePath, `${toCommandValue(message)}${os2.EOL}`, {
+    encoding: "utf8"
+  });
+}
+function prepareKeyValueMessage(key, value) {
+  const delimiter = `ghadelimiter_${crypto.randomUUID()}`;
+  const convertedValue = toCommandValue(value);
+  if (key.includes(delimiter)) {
+    throw new Error(`Unexpected input: name should not contain the delimiter "${delimiter}"`);
+  }
+  if (convertedValue.includes(delimiter)) {
+    throw new Error(`Unexpected input: value should not contain the delimiter "${delimiter}"`);
+  }
+  return `${key}<<${delimiter}${os2.EOL}${convertedValue}${os2.EOL}${delimiter}`;
+}
+
 // node_modules/@actions/core/lib/core.js
-import * as os3 from "os";
+import * as os4 from "os";
 
 // node_modules/@actions/http-client/lib/index.js
 var tunnel = __toESM(require_tunnel2(), 1);
@@ -20055,7 +20083,7 @@ var HttpResponseRetryCodes = [
 ];
 
 // node_modules/@actions/core/lib/summary.js
-import { EOL as EOL2 } from "os";
+import { EOL as EOL3 } from "os";
 import { constants, promises } from "fs";
 var __awaiter = function(thisArg, _arguments, P, generator) {
   function adopt(value) {
@@ -20199,7 +20227,7 @@ var Summary = class {
    * @returns {Summary} summary instance
    */
   addEOL() {
-    return this.addRaw(EOL2);
+    return this.addRaw(EOL3);
   }
   /**
    * Adds an HTML codeblock to the summary buffer
@@ -20339,20 +20367,20 @@ var Summary = class {
 var _summary = new Summary();
 
 // node_modules/@actions/core/lib/platform.js
-import os2 from "os";
+import os3 from "os";
 
 // node_modules/@actions/io/lib/io-util.js
-import * as fs from "fs";
-var { chmod, copyFile, lstat, mkdir, open, readdir, rename, rm, rmdir, stat, symlink, unlink } = fs.promises;
+import * as fs2 from "fs";
+var { chmod, copyFile, lstat, mkdir, open, readdir, rename, rm, rmdir, stat, symlink, unlink } = fs2.promises;
 var IS_WINDOWS = process.platform === "win32";
-var READONLY = fs.constants.O_RDONLY;
+var READONLY = fs2.constants.O_RDONLY;
 
 // node_modules/@actions/exec/lib/toolrunner.js
 var IS_WINDOWS2 = process.platform === "win32";
 
 // node_modules/@actions/core/lib/platform.js
-var platform = os2.platform();
-var arch = os2.arch();
+var platform = os3.platform();
+var arch = os3.arch();
 
 // node_modules/@actions/core/lib/core.js
 var ExitCode;
@@ -20373,6 +20401,14 @@ function getInput(name, options) {
   }
   return val.trim();
 }
+function setOutput(name, value) {
+  const filePath = process.env["GITHUB_OUTPUT"] || "";
+  if (filePath) {
+    return issueFileCommand("OUTPUT", prepareKeyValueMessage(name, value));
+  }
+  process.stdout.write(os4.EOL);
+  issueCommand("set-output", { name }, toCommandValue(value));
+}
 function setFailed(message) {
   process.exitCode = ExitCode.Failure;
   error(message);
@@ -20384,12 +20420,12 @@ function warning(message, properties = {}) {
   issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 function info(message) {
-  process.stdout.write(message + os3.EOL);
+  process.stdout.write(message + os4.EOL);
 }
 
 // node_modules/@actions/github/lib/context.js
-import { readFileSync, existsSync } from "fs";
-import { EOL as EOL4 } from "os";
+import { readFileSync, existsSync as existsSync2 } from "fs";
+import { EOL as EOL5 } from "os";
 var Context = class {
   /**
    * Hydrate the context from the environment
@@ -20398,11 +20434,11 @@ var Context = class {
     var _a3, _b, _c;
     this.payload = {};
     if (process.env.GITHUB_EVENT_PATH) {
-      if (existsSync(process.env.GITHUB_EVENT_PATH)) {
+      if (existsSync2(process.env.GITHUB_EVENT_PATH)) {
         this.payload = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
       } else {
         const path = process.env.GITHUB_EVENT_PATH;
-        process.stdout.write(`GITHUB_EVENT_PATH ${path} does not exist${EOL4}`);
+        process.stdout.write(`GITHUB_EVENT_PATH ${path} does not exist${EOL5}`);
       }
     }
     this.eventName = process.env.GITHUB_EVENT_NAME;
@@ -44269,6 +44305,169 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
+// src/llm.ts
+var LlmError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = "LlmError";
+  }
+  status;
+};
+var ConfigError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ConfigError";
+  }
+};
+var RETRY_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
+var MAX_ATTEMPTS = 3;
+var MAX_WAIT_MS = 1e4;
+var EMBED_BATCH = 100;
+var chatResponse = external_exports.object({
+  choices: external_exports.array(external_exports.object({ message: external_exports.object({ content: external_exports.string().nullish() }) })).min(1)
+});
+var embeddingResponse = external_exports.object({
+  // Gemini 0 olan index'i hiç yazmaz (varsayılan değeri atlar); yoksa listedeki sırası kullanılır.
+  data: external_exports.array(external_exports.object({ index: external_exports.number().int().nonnegative().optional(), embedding: external_exports.array(external_exports.number()).min(1) }))
+});
+function parseBaseUrl(value) {
+  let url2;
+  try {
+    url2 = new URL(value.endsWith("/") ? value : `${value}/`);
+  } catch {
+    throw new ConfigError("base-url is not a valid URL");
+  }
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url2.hostname);
+  if (url2.protocol !== "https:" && !(url2.protocol === "http:" && local)) {
+    throw new ConfigError("base-url must use https (http is allowed only for localhost)");
+  }
+  return url2;
+}
+function createLlmClient(config2) {
+  const base = parseBaseUrl(config2.baseUrl);
+  const doFetch = config2.fetch ?? fetch;
+  const sleep = config2.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const timeoutMs = config2.timeoutMs ?? 3e4;
+  const redact = (text) => text.split(config2.apiKey).join("***").slice(0, 200);
+  async function post(path, body) {
+    const url2 = new URL(path, base);
+    for (let attempt = 1; ; attempt++) {
+      let response;
+      try {
+        response = await doFetch(url2, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${config2.apiKey}` },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+      } catch (error63) {
+        if (attempt < MAX_ATTEMPTS) {
+          await sleep(backoff(attempt, null));
+          continue;
+        }
+        const reason = error63 instanceof Error ? error63.name : "network error";
+        throw new LlmError(`${path}: request failed (${reason})`);
+      }
+      if (response.ok) {
+        try {
+          return await response.json();
+        } catch {
+          throw new LlmError(`${path}: the answer is not JSON`, response.status);
+        }
+      }
+      if (RETRY_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+        await sleep(backoff(attempt, response.headers.get("retry-after")));
+        continue;
+      }
+      const detail = redact(await response.text().catch(() => ""));
+      throw new LlmError(`${path}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`, response.status);
+    }
+  }
+  async function embedBatch(texts) {
+    const parsed = embeddingResponse.safeParse(await post("embeddings", { model: config2.embeddingModel, input: texts }));
+    if (!parsed.success || parsed.data.data.length !== texts.length) {
+      throw new LlmError("embeddings: the answer does not have one vector per text");
+    }
+    const vectors = [];
+    parsed.data.data.forEach((item, position) => vectors[item.index ?? position] = item.embedding);
+    for (let i = 0; i < texts.length; i++) {
+      if (vectors[i] === void 0) throw new LlmError("embeddings: the answer does not have one vector per text");
+    }
+    return vectors;
+  }
+  return {
+    async chatJson(messages, schema) {
+      const json2 = await post("chat/completions", {
+        model: config2.model,
+        messages,
+        temperature: 0,
+        response_format: { type: "json_schema", json_schema: { name: schema.name, strict: true, schema: schema.schema } }
+      });
+      const parsed = chatResponse.safeParse(json2);
+      const content = parsed.success ? parsed.data.choices[0]?.message.content : null;
+      if (!content) throw new LlmError("chat/completions: the answer has no message");
+      return content;
+    },
+    async embed(texts) {
+      if (texts.length === 0) return [];
+      if (!config2.embeddingModel) throw new LlmError("embeddings: no embedding model is set");
+      const vectors = [];
+      for (let start = 0; start < texts.length; start += EMBED_BATCH) {
+        vectors.push(...await embedBatch(texts.slice(start, start + EMBED_BATCH)));
+      }
+      return vectors;
+    }
+  };
+}
+function backoff(attempt, retryAfter) {
+  const seconds = retryAfter === null ? NaN : Number(retryAfter);
+  const ms = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1e3 : 1e3 * 2 ** (attempt - 1);
+  return Math.min(ms, MAX_WAIT_MS);
+}
+
+// src/inputs.ts
+var MAX_CANDIDATES_LIMIT = 20;
+function readInputs(get) {
+  const value = (name) => get(name).trim();
+  const required2 = (name) => {
+    const text = value(name);
+    if (text === "") throw new ConfigError(`${name} is required`);
+    return text;
+  };
+  const baseUrl2 = required2("base-url");
+  parseBaseUrl(baseUrl2);
+  return {
+    apiKey: required2("api-key"),
+    baseUrl: baseUrl2,
+    model: required2("model"),
+    embeddingModel: value("embedding-model"),
+    githubToken: required2("github-token"),
+    maxCandidates: integerInRange("max-candidates", value("max-candidates") || "5", 0, MAX_CANDIDATES_LIMIT),
+    similarityThreshold: numberInRange("similarity-threshold", value("similarity-threshold") || "0.75", 0, 1),
+    dryRun: boolean4("dry-run", value("dry-run") || "false")
+  };
+}
+var DECIMAL = /^\d+(\.\d+)?$/;
+function numberInRange(name, text, min, max) {
+  const number4 = Number(text);
+  if (!DECIMAL.test(text) || number4 < min || number4 > max) {
+    throw new ConfigError(`${name} must be a number from ${min} to ${max}, got "${text}"`);
+  }
+  return number4;
+}
+function integerInRange(name, text, min, max) {
+  if (!/^\d+$/.test(text) || Number(text) < min || Number(text) > max) {
+    throw new ConfigError(`${name} must be a whole number from ${min} to ${max}, got "${text}"`);
+  }
+  return Number(text);
+}
+function boolean4(name, text) {
+  if (["true", "True", "TRUE"].includes(text)) return true;
+  if (["false", "False", "FALSE"].includes(text)) return false;
+  throw new ConfigError(`${name} must be true or false, got "${text}"`);
+}
+
 // src/classify.ts
 var ISSUE_TYPES = ["bug", "feature", "question", "docs"];
 var PRIORITIES = ["P0", "P1", "P2", "P3"];
@@ -44619,125 +44818,46 @@ function planLabels(current, wanted, previous) {
   };
 }
 
-// src/llm.ts
-var LlmError = class extends Error {
-  constructor(message, status) {
-    super(message);
-    this.status = status;
-    this.name = "LlmError";
+// src/triage.ts
+async function triage(deps) {
+  const { inputs, octokit, repo, llm, log } = deps;
+  const event = checkEvent(deps.eventName, deps.payload);
+  if (!event.ok) return { status: "skipped", reason: event.reason };
+  const { issue: issue3 } = event;
+  const previous = issue3.labels.length > 0 ? await findTriageComment(octokit, repo, issue3.number) : null;
+  const labelReason = checkLabels(issue3, previous !== null);
+  if (labelReason) return { status: "skipped", reason: labelReason };
+  log.info(`Triaging #${issue3.number} (${event.action})${inputs.dryRun ? " in dry-run mode" : ""}`);
+  const [labels, recent] = await Promise.all([fetchLabels(octokit, repo), fetchRecentIssues(octokit, repo, issue3.number)]);
+  const { method, candidates } = await findDuplicateCandidates({
+    llm,
+    issue: issue3,
+    recent,
+    maxCandidates: inputs.maxCandidates,
+    threshold: inputs.similarityThreshold,
+    useEmbeddings: inputs.embeddingModel !== "",
+    warn: (message) => log.warning(message)
+  });
+  log.info(`Duplicate candidates (${method}): ${candidates.map((c2) => `#${c2.number}${c2.similarity === null ? "" : ` ${c2.similarity.toFixed(2)}`}`).join(", ") || "none"}`);
+  const result = await classifyIssue(llm, { issue: issue3, labels, candidates });
+  if (!result.ok) {
+    log.warning(`Classification skipped: ${result.reason}`);
+    return { status: "skipped", reason: result.reason };
   }
-  status;
-};
-var ConfigError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ConfigError";
+  const c = result.classification;
+  log.info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); missing: ${c.missing.join(", ") || "none"}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(", ") || "none"}; language: ${c.language}`);
+  const plan = planLabels(issue3.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ""));
+  const commentBody = renderComment({ classification: c, labelState: plan, candidates });
+  if (inputs.dryRun) {
+    log.info(`Dry run, nothing written. Would add: ${plan.add.join(", ") || "none"}; would remove: ${plan.remove.join(", ") || "none"}; comment:
+${commentBody}`);
+    return { status: "triaged", classification: c, labels: plan.owned, dryRun: true };
   }
-};
-var RETRY_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
-var MAX_ATTEMPTS = 3;
-var MAX_WAIT_MS = 1e4;
-var EMBED_BATCH = 100;
-var chatResponse = external_exports.object({
-  choices: external_exports.array(external_exports.object({ message: external_exports.object({ content: external_exports.string().nullish() }) })).min(1)
-});
-var embeddingResponse = external_exports.object({
-  // Gemini 0 olan index'i hiç yazmaz (varsayılan değeri atlar); yoksa listedeki sırası kullanılır.
-  data: external_exports.array(external_exports.object({ index: external_exports.number().int().nonnegative().optional(), embedding: external_exports.array(external_exports.number()).min(1) }))
-});
-function parseBaseUrl(value) {
-  let url2;
-  try {
-    url2 = new URL(value.endsWith("/") ? value : `${value}/`);
-  } catch {
-    throw new ConfigError("base-url is not a valid URL");
-  }
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url2.hostname);
-  if (url2.protocol !== "https:" && !(url2.protocol === "http:" && local)) {
-    throw new ConfigError("base-url must use https (http is allowed only for localhost)");
-  }
-  return url2;
-}
-function createLlmClient(config2) {
-  const base = parseBaseUrl(config2.baseUrl);
-  const doFetch = config2.fetch ?? fetch;
-  const sleep = config2.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const timeoutMs = config2.timeoutMs ?? 3e4;
-  const redact = (text) => text.split(config2.apiKey).join("***").slice(0, 200);
-  async function post(path, body) {
-    const url2 = new URL(path, base);
-    for (let attempt = 1; ; attempt++) {
-      let response;
-      try {
-        response = await doFetch(url2, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${config2.apiKey}` },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(timeoutMs)
-        });
-      } catch (error63) {
-        if (attempt < MAX_ATTEMPTS) {
-          await sleep(backoff(attempt, null));
-          continue;
-        }
-        const reason = error63 instanceof Error ? error63.name : "network error";
-        throw new LlmError(`${path}: request failed (${reason})`);
-      }
-      if (response.ok) {
-        try {
-          return await response.json();
-        } catch {
-          throw new LlmError(`${path}: the answer is not JSON`, response.status);
-        }
-      }
-      if (RETRY_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
-        await sleep(backoff(attempt, response.headers.get("retry-after")));
-        continue;
-      }
-      const detail = redact(await response.text().catch(() => ""));
-      throw new LlmError(`${path}: HTTP ${response.status}${detail ? ` ${detail}` : ""}`, response.status);
-    }
-  }
-  async function embedBatch(texts) {
-    const parsed = embeddingResponse.safeParse(await post("embeddings", { model: config2.embeddingModel, input: texts }));
-    if (!parsed.success || parsed.data.data.length !== texts.length) {
-      throw new LlmError("embeddings: the answer does not have one vector per text");
-    }
-    const vectors = [];
-    parsed.data.data.forEach((item, position) => vectors[item.index ?? position] = item.embedding);
-    for (let i = 0; i < texts.length; i++) {
-      if (vectors[i] === void 0) throw new LlmError("embeddings: the answer does not have one vector per text");
-    }
-    return vectors;
-  }
-  return {
-    async chatJson(messages, schema) {
-      const json2 = await post("chat/completions", {
-        model: config2.model,
-        messages,
-        temperature: 0,
-        response_format: { type: "json_schema", json_schema: { name: schema.name, strict: true, schema: schema.schema } }
-      });
-      const parsed = chatResponse.safeParse(json2);
-      const content = parsed.success ? parsed.data.choices[0]?.message.content : null;
-      if (!content) throw new LlmError("chat/completions: the answer has no message");
-      return content;
-    },
-    async embed(texts) {
-      if (texts.length === 0) return [];
-      if (!config2.embeddingModel) throw new LlmError("embeddings: no embedding model is set");
-      const vectors = [];
-      for (let start = 0; start < texts.length; start += EMBED_BATCH) {
-        vectors.push(...await embedBatch(texts.slice(start, start + EMBED_BATCH)));
-      }
-      return vectors;
-    }
-  };
-}
-function backoff(attempt, retryAfter) {
-  const seconds = retryAfter === null ? NaN : Number(retryAfter);
-  const ms = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1e3 : 1e3 * 2 ** (attempt - 1);
-  return Math.min(ms, MAX_WAIT_MS);
+  const commentResult = await upsertTriageComment(octokit, repo, issue3.number, previous, commentBody);
+  await addLabels(octokit, repo, issue3.number, plan.add);
+  await removeLabels(octokit, repo, issue3.number, plan.remove);
+  log.info(`Comment ${commentResult}; labels added: ${plan.add.join(", ") || "none"}; removed: ${plan.remove.join(", ") || "none"}`);
+  return { status: "triaged", classification: c, labels: plan.owned, dryRun: false };
 }
 
 // src/main.ts
@@ -44745,43 +44865,22 @@ async function run() {
   try {
     const apiKey = getInput("api-key");
     if (apiKey) setSecret(apiKey);
-    const event = checkEvent(context2.eventName, context2.payload);
-    if (!event.ok) return skip(event.reason);
-    const { issue: issue3 } = event;
-    const octokit = getOctokit(getInput("github-token", { required: true }));
-    const repo = context2.repo;
-    const previous = issue3.labels.length > 0 ? await findTriageComment(octokit, repo, issue3.number) : null;
-    const labelReason = checkLabels(issue3, previous !== null);
-    if (labelReason) return skip(labelReason);
-    info(`Triaging #${issue3.number} (${event.action})`);
-    const embeddingModel = getInput("embedding-model");
-    const llm = createLlmClient({
-      baseUrl: getInput("base-url"),
-      apiKey: getInput("api-key", { required: true }),
-      model: getInput("model"),
-      embeddingModel
+    const inputs = readInputs((name) => getInput(name));
+    const outcome = await triage({
+      inputs,
+      eventName: context2.eventName,
+      payload: context2.payload,
+      octokit: getOctokit(inputs.githubToken),
+      repo: context2.repo,
+      llm: createLlmClient(inputs),
+      log: { info, warning }
     });
-    const [labels, recent] = await Promise.all([fetchLabels(octokit, repo), fetchRecentIssues(octokit, repo, issue3.number)]);
-    const { method, candidates } = await findDuplicateCandidates({
-      llm,
-      issue: issue3,
-      recent,
-      maxCandidates: Number(getInput("max-candidates") || 5),
-      threshold: Number(getInput("similarity-threshold") || 0.75),
-      useEmbeddings: embeddingModel !== "",
-      warn: warning
-    });
-    info(`Duplicate candidates (${method}): ${candidates.map((c2) => `#${c2.number}${c2.similarity === null ? "" : ` ${c2.similarity.toFixed(2)}`}`).join(", ") || "none"}`);
-    const result = await classifyIssue(llm, { issue: issue3, labels, candidates });
-    if (!result.ok) return warning(`Classification skipped: ${result.reason}`);
-    const c = result.classification;
-    info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); labels: ${c.labels.join(", ") || "none"}; missing: ${c.missing.join(", ") || "none"}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(", ") || "none"}; language: ${c.language}`);
-    const plan = planLabels(issue3.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ""));
-    const commentBody = renderComment({ classification: c, labelState: plan, candidates });
-    const commentResult = await upsertTriageComment(octokit, repo, issue3.number, previous, commentBody);
-    await addLabels(octokit, repo, issue3.number, plan.add);
-    await removeLabels(octokit, repo, issue3.number, plan.remove);
-    info(`Comment ${commentResult}; labels added: ${plan.add.join(", ") || "none"}; removed: ${plan.remove.join(", ") || "none"}`);
+    if (outcome.status === "skipped") return info(`Skipped: ${outcome.reason}`);
+    const c = outcome.classification;
+    setOutput("type", c.type);
+    setOutput("priority", c.priority);
+    setOutput("labels", outcome.labels.join(","));
+    setOutput("duplicates", c.duplicates.join(","));
   } catch (error63) {
     if (error63 instanceof LlmError) return warning(`LLM request failed: ${error63.message}`);
     if (error63.status === 403) {
@@ -44790,9 +44889,6 @@ async function run() {
     }
     setFailed(error63 instanceof Error ? error63.message : String(error63));
   }
-}
-function skip(reason) {
-  info(`Skipped: ${reason}`);
 }
 
 // src/index.ts
