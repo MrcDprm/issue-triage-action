@@ -78,7 +78,7 @@ To try it first without touching any issue, add `dry-run: true` and read the res
 | `model` | `gemini-3.1-flash-lite` | Chat model that classifies the issue. |
 | `embedding-model` | `gemini-embedding-001` | Embedding model for duplicates. Leave empty if the provider has none. |
 | `github-token` | `${{ github.token }}` | Token used to read issues and write labels and the comment. |
-| `max-candidates` | `5` | Similar issues shown to the model as possible duplicates (0-20, 0 turns it off). |
+| `max-candidates` | `5` | Similar issues shown to the model as possible duplicates (0-20, 0 turns it off). Without an embedding model, the 30 most recent titles are shown instead. |
 | `similarity-threshold` | `0.75` | Minimum cosine similarity (0-1) for a duplicate candidate. |
 | `dry-run` | `false` | Write only to the log, not to the issue. |
 
@@ -112,7 +112,7 @@ A local Ollama (`http://localhost:11434/v1`) works on a self-hosted runner.
 - **The comment comes from a template.** The only free text is the model's priority reason; it is escaped, and mentions, issue references and links are neutralised, so nobody gets pinged and no link is clickable.
 - **Least privilege:** the workflow needs only `issues: write` and `contents: read`, and it does not use `pull_request_target`.
 - **The key** stays in a secret, is masked in logs and is removed from error messages.
-- **Quota:** issue text is cut before it is sent, and each issue costs at most one chat request and one or two embedding requests.
+- **Quota:** issue text is cut before it is sent, and each issue costs at most one chat request and one or two embedding requests. Anyone who can open or edit an issue in a public repository spends from your key's quota; when the quota runs out, the run ends with a warning and your issues are not affected.
 - **Privacy:** on Gemini's free tier, Google may use the requests to improve its products. For private repositories, use a paid key or another provider.
 
 ## What I Learned

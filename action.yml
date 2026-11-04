@@ -27,7 +27,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   max-candidates:
-    description: How many similar issues (0-20) are shown to the model as possible duplicates; 0 turns duplicate search off.
+    description: How many similar issues (0-20) are shown to the model as possible duplicates; 0 turns duplicate search off. Without an embedding model, the 30 most recent issue titles are shown instead.
     required: false
     default: '5'
   similarity-threshold:
