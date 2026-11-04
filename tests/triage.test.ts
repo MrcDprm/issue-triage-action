@@ -154,7 +154,7 @@ describe('triage against prompt injection', () => {
     const body = commentOf(github)
     // Anma, bağlantı ve başka issue referansı yorumda çalışmaz; aday dışı #999 hiç görünmez.
     expect(body).not.toMatch(/@org|https:\/\/|\]\(|#42|#999/)
-    expect(body).toContain('- #3 ')
+    expect(body).toContain('- #3')
     // Eksik bilgi sadece hata kaydında istenir.
     expect(body).not.toContain('version')
   })

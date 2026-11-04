@@ -44627,7 +44627,6 @@ function checkLabels(issue3, hasTriageComment) {
 var OWNED_PREFIX = "<!-- issue-triage-labels: ";
 var DECLINED_PREFIX = "<!-- issue-triage-declined: ";
 var SUFFIX = " -->";
-var TITLE_LIMIT2 = 80;
 var ZWSP = "\u200B";
 function sanitize(text, limit = 300) {
   return text.replace(/\s+/g, " ").trim().slice(0, limit).replace(/[\\`*_{}[\]()+\-.!|~>]/g, "\\$&").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/@/g, `@${ZWSP}`).replace(/#/g, `#${ZWSP}`).replace(/\bGH\\-/gi, (match) => `${match.slice(0, 2)}${ZWSP}${match.slice(2)}`).replace(/:\/\//g, `:${ZWSP}//`).replace(/www\\\./gi, (match) => `${match.slice(0, 3)}${ZWSP}${match.slice(3)}`);
@@ -44668,7 +44667,7 @@ var TEXT = {
     footer: "Bu yorumu issue metninden bir bot yazd\u0131; issue d\xFCzenlenince g\xFCncellenir. Bir bak\u0131mc\u0131 inceleyecek."
   }
 };
-function renderComment({ classification: c, labelState, candidates }) {
+function renderComment({ classification: c, labelState }) {
   const t = TEXT[c.language];
   const label = (name) => `\`${name.replace(/`/g, "'")}\``;
   const lines = [
@@ -44677,16 +44676,12 @@ function renderComment({ classification: c, labelState, candidates }) {
     markerLine(DECLINED_PREFIX, labelState.declined),
     `### ${t.title}`,
     "",
-    `| | |`,
-    `|---|---|`,
-    `| ${t.type} | ${t.types[c.type]} |`,
-    `| ${t.priority} | **${c.priority}**${c.priorityReason ? `: ${sanitize(c.priorityReason)}` : ""} |`,
-    `| ${t.labels} | ${labelState.owned.length > 0 ? labelState.owned.map(label).join(", ") : t.none} |`
+    // Tablo yerine liste: GitHub boş başlık satırını da çizdiği için tablo ilk satırda boş bir şerit bırakıyordu.
+    `- **${t.type}:** ${t.types[c.type]}`,
+    `- **${t.priority}:** ${c.priority}${c.priorityReason ? ` (${sanitize(c.priorityReason)})` : ""}`,
+    `- **${t.labels}:** ${labelState.owned.length > 0 ? labelState.owned.map(label).join(", ") : t.none}`
   ];
-  if (c.duplicates.length > 0) {
-    const titles = new Map(candidates.map((candidate) => [candidate.number, candidate.title]));
-    lines.push("", t.duplicates, ...c.duplicates.map((number4) => `- #${number4} ${sanitize(titles.get(number4) ?? "", TITLE_LIMIT2)}`.trimEnd()));
-  }
+  if (c.duplicates.length > 0) lines.push("", t.duplicates, ...c.duplicates.map((number4) => `- #${number4}`));
   if (c.missing.length > 0) {
     lines.push("", t.missingIntro, ...c.missing.map((detail) => `- ${t.missing[detail]}`));
   }
@@ -44851,7 +44846,7 @@ async function triage(deps) {
   const c = result.classification;
   log.info(`Classified as ${c.type}, ${c.priority} (${c.priorityReason}); missing: ${c.missing.join(", ") || "none"}; duplicates: ${c.duplicates.map((n) => `#${n}`).join(", ") || "none"}; language: ${c.language}`);
   const plan = planLabels(issue3.labels, wantedLabels(c, labels), readLabelState(previous?.body ?? ""));
-  const commentBody = renderComment({ classification: c, labelState: plan, candidates });
+  const commentBody = renderComment({ classification: c, labelState: plan });
   if (inputs.dryRun) {
     log.info(`Dry run, nothing written. Would add: ${plan.add.join(", ") || "none"}; would remove: ${plan.remove.join(", ") || "none"}; comment:
 ${commentBody}`);

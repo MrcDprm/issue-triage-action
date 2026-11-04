@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Classification } from '../src/classify.js'
 import { readLabelState, renderComment, sanitize } from '../src/comment.js'
-import type { Candidate } from '../src/duplicates.js'
 import { TRIAGE_MARKER } from '../src/issue.js'
 
 const ZWSP = '​'
@@ -16,9 +15,8 @@ const classification = (overrides: Partial<Classification> = {}): Classification
   duplicates: [],
   ...overrides,
 })
-const candidates: Candidate[] = [{ number: 12, title: 'App crashes on start', state: 'closed', similarity: 0.9 }]
 const render = (c: Partial<Classification> = {}, owned = ['bug', 'P1'], declined: string[] = []) =>
-  renderComment({ classification: classification(c), labelState: { owned, declined }, candidates })
+  renderComment({ classification: classification(c), labelState: { owned, declined } })
 
 describe('sanitize', () => {
   it('does not mention anyone', () => {
@@ -53,39 +51,38 @@ describe('renderComment', () => {
 
   it('shows type, priority with reason and the labels the bot added', () => {
     const body = render()
-    expect(body).toContain('| Type | Bug |')
-    expect(body).toContain('| Priority | **P1**: The app does not open\\. |')
-    expect(body).toContain('| Labels added | `bug`, `P1` |')
+    expect(body).toContain('- **Type:** Bug')
+    expect(body).toContain('- **Priority:** P1 (The app does not open\\.)')
+    expect(body).toContain('- **Labels added:** `bug`, `P1`')
+    // Boş başlık satırlı tablo GitHub'da boş bir şerit olarak görünüyordu.
+    expect(body).not.toContain('|---')
   })
 
   it('writes Turkish for a Turkish issue', () => {
     const body = render({ language: 'tr', missing: ['version'] })
-    expect(body).toContain('| Tür | Hata |')
+    expect(body).toContain('- **Tür:** Hata')
     expect(body).toContain('- kullandığınız sürüm')
     expect(body).not.toContain('Priority')
   })
 
-  it('lists duplicates with a cleaned title and asks for missing details', () => {
-    const body = render({ duplicates: [12], missing: ['steps', 'actual'] })
-    expect(body).toContain('- #12 App crashes on start')
+  it('lists duplicates as bare references and asks for missing details', () => {
+    const body = render({ duplicates: [12, 15], missing: ['steps', 'actual'] })
+    // GitHub "#12"yi başlığıyla kendisi gösterir; başlığı da yazmak onu iki kez gösteriyordu.
+    expect(body).toContain('- #12\n- #15\n')
     expect(body).toContain('- the steps to reproduce it')
     expect(body).toContain('- what happened instead (error message or log)')
   })
 
   it('leaves out empty sections', () => {
     const body = render({}, [])
-    expect(body).toContain('| Labels added | none |')
+    expect(body).toContain('- **Labels added:** none')
     expect(body).not.toContain('may be the same')
     expect(body).not.toContain('please edit')
   })
 
-  it('cleans the model reason and the duplicate title', () => {
-    const body = renderComment({
-      classification: classification({ priorityReason: '@admin see https://evil.example', duplicates: [5] }),
-      labelState: { owned: [], declined: [] },
-      candidates: [{ number: 5, title: '<script>alert(1)</script> @all', state: 'open', similarity: 0.8 }],
-    })
-    expect(body).not.toMatch(/@admin|@all|https:\/\/|<script>/)
+  it('cleans the model reason', () => {
+    const body = render({ priorityReason: '@admin see https://evil.example <script>alert(1)</script>' })
+    expect(body).not.toMatch(/@admin|https:\/\/|<script>/)
   })
 
   it('keeps a label name with a backtick inside its code span', () => {
